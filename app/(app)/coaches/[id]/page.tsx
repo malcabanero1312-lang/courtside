@@ -11,11 +11,11 @@ import { SubmitButton } from "@/components/buttons";
 import { CoachFields } from "../coach-fields";
 import { addTimeOff, deleteBlockedTime, saveAvailability, updateCoach } from "../actions";
 import { InviteForm } from "@/components/invite-form";
+import { WeeklyHoursEditor, type DaySchedule } from "@/components/weekly-hours-editor";
 import { appUrl } from "@/lib/env";
 
 export const metadata: Metadata = { title: "Coach" };
 
-const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 const ORDER = [1, 2, 3, 4, 5, 6, 0];
 
 export default async function CoachPage({
@@ -37,8 +37,9 @@ export default async function CoachPage({
   const canBlock = membership.role !== "coach" || isSelf;
   const tz = org.timezone;
 
-  const [availRes, blockedRes, upcomingRes, inviteRes] = await Promise.all([
+  const [availRes, breaksRes, blockedRes, upcomingRes, inviteRes] = await Promise.all([
     supabase.from("coach_availability").select("*").eq("coach_id", id).order("weekday").order("start_time"),
+    supabase.from("coach_breaks").select("*").eq("coach_id", id).order("weekday").order("start_time"),
     supabase.from("blocked_times").select("*").eq("coach_id", id).gte("ends_at", new Date().toISOString()).order("starts_at"),
     supabase
       .from("appointments")
@@ -55,6 +56,19 @@ export default async function CoachPage({
 
   const availability = (availRes.data ?? []) as { weekday: number; start_time: string; end_time: string }[];
   const byDay = new Map(availability.map((a) => [a.weekday, a]));
+  const breakRows = (breaksRes.data ?? []) as { weekday: number; start_time: string; end_time: string; label: string | null }[];
+  const schedule: DaySchedule[] = ORDER.map((weekday) => {
+    const slot = byDay.get(weekday);
+    return {
+      weekday,
+      on: Boolean(slot),
+      start: slot?.start_time?.slice(0, 5) ?? "07:00",
+      end: slot?.end_time?.slice(0, 5) ?? "20:00",
+      breaks: breakRows
+        .filter((b) => b.weekday === weekday)
+        .map((b) => ({ start: b.start_time.slice(0, 5), end: b.end_time.slice(0, 5), label: b.label ?? "" }))
+    };
+  });
   const blocked = (blockedRes.data ?? []) as { id: string; starts_at: string; ends_at: string; reason: string | null }[];
   const upcoming = (upcomingRes.data ?? []) as unknown as AppointmentWithRelations[];
   const invite = inviteRes.data as { id: string; email: string } | null;
@@ -89,48 +103,8 @@ export default async function CoachPage({
 
       <div className="grid main-side">
         <div className="stack">
-          <Card title="Weekly working hours">
-            <form action={saveAvailability}>
-              <input type="hidden" name="coach_id" value={coach.id} />
-              <div className="list">
-                {ORDER.map((weekday) => {
-                  const slot = byDay.get(weekday);
-                  return (
-                    <div key={weekday} className="list-item" style={{ padding: "10px 20px" }}>
-                      <label className="check" style={{ width: 140 }}>
-                        <input type="checkbox" name={`on_${weekday}`} defaultChecked={Boolean(slot)} disabled={!canEditHours} />
-                        {DAYS[weekday]}
-                      </label>
-                      <input
-                        className="input"
-                        type="time"
-                        name={`start_${weekday}`}
-                        defaultValue={slot?.start_time?.slice(0, 5) ?? "07:00"}
-                        style={{ width: 130 }}
-                        disabled={!canEditHours}
-                        aria-label={`${DAYS[weekday]} start`}
-                      />
-                      <span className="muted">to</span>
-                      <input
-                        className="input"
-                        type="time"
-                        name={`end_${weekday}`}
-                        defaultValue={slot?.end_time?.slice(0, 5) ?? "20:00"}
-                        style={{ width: 130 }}
-                        disabled={!canEditHours}
-                        aria-label={`${DAYS[weekday]} end`}
-                      />
-                    </div>
-                  );
-                })}
-              </div>
-              {canEditHours ? (
-                <div className="row between wrap" style={{ padding: "12px 20px", borderTop: "1px solid var(--line)" }}>
-                  <span className="small muted">Bookings outside these hours show a warning but can still be saved.</span>
-                  <SubmitButton variant="primary" size="small">Save hours</SubmitButton>
-                </div>
-              ) : null}
-            </form>
+          <Card title="Weekly working hours and breaks">
+            <WeeklyHoursEditor coachId={coach.id} initial={schedule} canEdit={canEditHours} action={saveAvailability} />
           </Card>
 
           <Card title="Upcoming sessions">

@@ -67,28 +67,78 @@ export async function saveAvailability(formData: FormData) {
   const { supabase, org } = await requireSession(["admin", "coach"]);
   const coachId = text(formData, "coach_id");
   const path = `/coaches/${coachId}`;
-  const rows: { org_id: string; coach_id: string; weekday: number; start_time: string; end_time: string }[] = [];
-  for (let weekday = 0; weekday < 7; weekday++) {
-    if (formData.get(`on_${weekday}`) !== "on") continue;
-    const start = text(formData, `start_${weekday}`);
-    const end = text(formData, `end_${weekday}`);
-    if (!isValidTimeInput(start) || !isValidTimeInput(end) || end <= start) {
-      back(path, "error", "Each working day needs a start time before its end time.");
-    }
-    rows.push({ org_id: org.id, coach_id: coachId, weekday, start_time: start, end_time: end });
+
+  let days: { weekday: number; on: boolean; start: string; end: string; breaks: { start: string; end: string; label: string }[] }[];
+  try {
+    days = JSON.parse(String(formData.get("schedule") ?? "[]"));
+    if (!Array.isArray(days)) throw new Error("bad");
+  } catch {
+    back(path, "error", "Couldn't read the schedule. Please try again.");
   }
-  const { data: previous } = await supabase.from("coach_availability").select("id").eq("coach_id", coachId);
-  if (rows.length > 0) {
-    const { error } = await supabase.from("coach_availability").insert(rows);
+
+  const hours: { org_id: string; coach_id: string; weekday: number; start_time: string; end_time: string }[] = [];
+  const breaks: { org_id: string; coach_id: string; weekday: number; start_time: string; end_time: string; label: string | null }[] = [];
+  const dayNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+
+  for (const day of days) {
+    const weekday = Number(day.weekday);
+    if (!Number.isInteger(weekday) || weekday < 0 || weekday > 6 || !day.on) continue;
+    const name = dayNames[weekday];
+    if (!isValidTimeInput(day.start) || !isValidTimeInput(day.end) || day.end <= day.start) {
+      back(path, "error", `${name}: the start time must be before the end time.`);
+    }
+    hours.push({ org_id: org.id, coach_id: coachId, weekday, start_time: day.start, end_time: day.end });
+    const sorted = [...(day.breaks ?? [])].sort((a, b) => a.start.localeCompare(b.start));
+    let previousEnd = "";
+    for (const slot of sorted) {
+      if (!isValidTimeInput(slot.start) || !isValidTimeInput(slot.end) || slot.end <= slot.start) {
+        back(path, "error", `${name}: each break needs a start time before its end time.`);
+      }
+      if (slot.start < day.start || slot.end > day.end) {
+        back(path, "error", `${name}: breaks must be within working hours (${day.start}–${day.end}).`);
+      }
+      if (previousEnd && slot.start < previousEnd) {
+        back(path, "error", `${name}: two breaks overlap. Adjust their times.`);
+      }
+      previousEnd = slot.end;
+      breaks.push({
+        org_id: org.id,
+        coach_id: coachId,
+        weekday,
+        start_time: slot.start,
+        end_time: slot.end,
+        label: String(slot.label ?? "").trim().slice(0, 60) || null
+      });
+    }
+  }
+
+  const [{ data: oldHours }, { data: oldBreaks }] = await Promise.all([
+    supabase.from("coach_availability").select("id").eq("coach_id", coachId),
+    supabase.from("coach_breaks").select("id").eq("coach_id", coachId)
+  ]);
+
+  if (hours.length > 0) {
+    const { error } = await supabase.from("coach_availability").insert(hours);
     if (error) back(path, "error", friendlyError(error));
   }
-  const oldIds = (previous ?? []).map((row: { id: string }) => row.id);
-  if (oldIds.length > 0) {
-    const { error: deleteError } = await supabase.from("coach_availability").delete().in("id", oldIds);
-    if (deleteError) back(path, "error", friendlyError(deleteError));
+  if (breaks.length > 0) {
+    const { error } = await supabase.from("coach_breaks").insert(breaks);
+    if (error) back(path, "error", friendlyError(error));
   }
+
+  const oldHourIds = (oldHours ?? []).map((row: { id: string }) => row.id);
+  const oldBreakIds = (oldBreaks ?? []).map((row: { id: string }) => row.id);
+  if (oldHourIds.length > 0) await supabase.from("coach_availability").delete().in("id", oldHourIds);
+  if (oldBreakIds.length > 0) await supabase.from("coach_breaks").delete().in("id", oldBreakIds);
+
   revalidatePath(path);
-  back(path, "notice", rows.length ? "Working hours saved." : "Working hours cleared — any time will be accepted.");
+  back(
+    path,
+    "notice",
+    hours.length
+      ? `Working hours saved${breaks.length ? ` with ${breaks.length} break${breaks.length === 1 ? "" : "s"}` : ""}.`
+      : "Working hours cleared — any time will be accepted."
+  );
 }
 
 export async function addTimeOff(formData: FormData) {

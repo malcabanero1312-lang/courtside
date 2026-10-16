@@ -1333,6 +1333,11 @@ details.disclosure > summary::-webkit-details-marker {
   border: 1px solid var(--line);
 }
 
+.break-list {
+  margin-top: 10px;
+  padding-left: 140px;
+}
+
 .anim-in {
   animation: rise 0.35s ease both;
 }
@@ -1429,5 +1434,8 @@ details.disclosure > summary::-webkit-details-marker {
   }
   .hide-mobile {
     display: none;
+  }
+  .break-list {
+    padding-left: 0;
   }
 }
