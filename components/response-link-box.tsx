@@ -9,7 +9,7 @@ export function ResponseLinkBox({ appointmentId, link }: { appointmentId: string
     <div className="stack tight">
       <p className="small muted">
         The student uses this page to confirm, decline or ask for another time. It's already included in the WhatsApp
-        messages.
+        messages. Students can answer only once — to let them answer again, use Replace link and send the new one.
       </p>
       <input className="input small" value={link} readOnly onFocus={(event) => event.currentTarget.select()} aria-label="Response link" />
       <div className="row">

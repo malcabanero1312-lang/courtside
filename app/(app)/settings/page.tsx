@@ -62,6 +62,17 @@ export default async function SettingsPage({
                 <small>Used on the student response page.</small>
               </label>
               <label className="field">
+                <span>Number students can message (WhatsApp)</span>
+                <input
+                  className="input"
+                  name="contact_phone"
+                  defaultValue={org.contact_phone ? `+${org.contact_phone}` : ""}
+                  placeholder="0917 123 4567"
+                  inputMode="tel"
+                />
+                <small>Shown on the student page after they answer, for questions or changes.</small>
+              </label>
+              <label className="field">
                 <span>Reply-to email</span>
                 <input className="input" type="email" name="reply_to_email" defaultValue={org.reply_to_email ?? ""} placeholder="bookings@yourclub.com" />
                 <small>Where student replies to emails go.</small>

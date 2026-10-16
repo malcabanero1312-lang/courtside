@@ -18,7 +18,15 @@ const DONE: Record<string, { title: string; body: string }> = {
   }
 };
 
-export function ResponseForm({ token, currentStatus }: { token: string; currentStatus: string }) {
+export function ResponseForm({
+  token,
+  currentStatus,
+  contactHref
+}: {
+  token: string;
+  currentStatus: string;
+  contactHref: string | null;
+}) {
   const [state, action] = useActionState<ResponseState, FormData>(submitResponse, {});
   const [choice, setChoice] = useState<string>(currentStatus === "confirmed" || currentStatus === "pending_approval" ? "" : "confirm");
   const [note, setNote] = useState("");
@@ -32,9 +40,21 @@ export function ResponseForm({ token, currentStatus }: { token: string; currentS
         </div>
         <h3 className="display" style={{ fontSize: 24 }}>{done.title}</h3>
         <p>{done.body}</p>
-        <a className="btn" href={`/r/${token}`} style={{ marginTop: 8 }}>
-          Back to booking
-        </a>
+        <div className="notice info" style={{ margin: "8px 0 0", textAlign: "left" }}>
+          <Icon name="info" size={17} />
+          <div>
+            Your answer has been recorded and can't be changed online. If you have any concerns, please contact us directly.
+            {contactHref ? (
+              <div style={{ marginTop: 10 }}>
+                <a className="btn whatsapp small" href={contactHref} target="_blank" rel="noopener noreferrer">
+                  <Icon name="whatsapp" size={15} /> Message us on WhatsApp
+                </a>
+              </div>
+            ) : (
+              <div style={{ marginTop: 4 }}>You can simply reply to our WhatsApp message.</div>
+            )}
+          </div>
+        </div>
       </div>
     );
   }
@@ -85,7 +105,17 @@ export function ResponseForm({ token, currentStatus }: { token: string; currentS
           />
         </label>
       ) : null}
-      <SubmitButton variant="primary" size="lg" block pendingText="Sending…" disabled={!choice}>
+      <p className="small muted" style={{ textAlign: "center" }}>
+        You can only answer once. If anything changes later, please contact us directly.
+      </p>
+      <SubmitButton
+        variant="primary"
+        size="lg"
+        block
+        pendingText="Sending…"
+        disabled={!choice}
+        confirmText="Send your answer? You won't be able to change it online afterwards."
+      >
         {choice === "confirm" ? "Confirm session" : choice === "reschedule" ? "Request new time" : choice === "decline" ? "Send" : "Choose an option"}
       </SubmitButton>
     </form>

@@ -15,7 +15,7 @@ export const dynamic = "force-dynamic";
 
 interface PortalData {
   found: boolean;
-  state?: "open" | "expired" | "revoked" | "past" | "closed";
+  state?: "open" | "answered" | "expired" | "revoked" | "past" | "closed";
   reference?: string;
   status?: AppointmentStatus;
   starts_at?: string;
@@ -31,7 +31,48 @@ interface PortalData {
   org_name?: string;
   brand_color?: string;
   cancellation_policy?: string | null;
+  contact_phone?: string | null;
   student_note?: string | null;
+}
+
+const ANSWERED: Partial<Record<AppointmentStatus, { title: string; body: string }>> = {
+  pending_approval: {
+    title: "You confirmed this session",
+    body: "Thank you! The club office is finalising your booking, and we'll message you once it's approved."
+  },
+  confirmed: {
+    title: "Your session is confirmed",
+    body: "Thank you! Your booking has been approved by the club. See you on court."
+  },
+  declined: {
+    title: "You told us you can't make it",
+    body: "Thanks for letting us know. We've released this time slot."
+  },
+  reschedule_requested: {
+    title: "You asked for a different time",
+    body: "We'll message you shortly with a new time based on your preferences."
+  }
+};
+
+function ContactNote({ href }: { href: string | null }) {
+  return (
+    <div className="notice info" style={{ margin: 0 }}>
+      <Icon name="info" size={17} />
+      <div>
+        Your answer has been recorded and can't be changed online. If you have any concerns or need to change something,
+        please contact us directly.
+        {href ? (
+          <div style={{ marginTop: 10 }}>
+            <a className="btn whatsapp small" href={href} target="_blank" rel="noopener noreferrer">
+              <Icon name="whatsapp" size={15} /> Message us on WhatsApp
+            </a>
+          </div>
+        ) : (
+          <div style={{ marginTop: 4 }}>You can simply reply to our WhatsApp message.</div>
+        )}
+      </div>
+    </div>
+  );
 }
 
 function Shell({ color, children }: { color?: string; children: ReactNode }) {
@@ -83,6 +124,12 @@ export default async function PortalPage({ params }: { params: Promise<{ token: 
   const status = page.status;
   const meta = STATUS_META[status];
   const color = /^#[0-9a-fA-F]{6}$/.test(page.brand_color ?? "") ? page.brand_color : "#12392c";
+  const contactHref =
+    page.contact_phone && /^[0-9]{7,15}$/.test(page.contact_phone)
+      ? `https://wa.me/${page.contact_phone}?text=${encodeURIComponent(
+          `Hi ${page.org_name ?? ""}, I have a question about my tennis booking ${page.reference ?? ""} on ${formatDate(page.starts_at, tz)}.`
+        )}`
+      : null;
   const mapsHref =
     page.maps_url && /^https?:\/\//.test(page.maps_url)
       ? page.maps_url
@@ -172,7 +219,19 @@ export default async function PortalPage({ params }: { params: Promise<{ token: 
                 <div>You declined this session. Changed your mind? You can still confirm below if the time is free.</div>
               </div>
             ) : null}
-            <ResponseForm token={token} currentStatus={status} />
+            <ResponseForm token={token} currentStatus={status} contactHref={contactHref} />
+          </>
+        ) : page.state === "answered" ? (
+          <>
+            <div className="empty" style={{ padding: "18px 8px" }}>
+              <div className="empty-icon" style={{ background: "var(--ball)", color: "var(--court)" }}>
+                <Icon name="check" size={26} />
+              </div>
+              <h3 className="display" style={{ fontSize: 22 }}>{ANSWERED[status]?.title ?? "We've received your answer"}</h3>
+              <p>{ANSWERED[status]?.body ?? "Thank you for letting us know."}</p>
+              {page.student_note ? <p className="small">Your note: “{page.student_note}”</p> : null}
+            </div>
+            <ContactNote href={contactHref} />
           </>
         ) : page.state === "expired" ? (
           <Message title="This link has expired" body="Please message us on WhatsApp and we'll help you right away." />

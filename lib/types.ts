@@ -31,6 +31,7 @@ export interface Organization {
   cancellation_policy: string | null;
   office_name: string | null;
   office_phone: string | null;
+  contact_phone: string | null;
 }
 
 export interface Membership {
