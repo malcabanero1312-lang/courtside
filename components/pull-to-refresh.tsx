@@ -2,8 +2,9 @@
 
 import { useEffect, useRef, useState } from "react";
 
-const THRESHOLD = 80;
-const MAX_PULL = 130;
+const THRESHOLD = 70;
+const MAX_PULL = 110;
+const START_AFTER = 12;
 
 function isStandalone(): boolean {
   if (typeof window === "undefined") return false;
@@ -23,17 +24,31 @@ function insideScrolledArea(target: EventTarget | null): boolean {
   return false;
 }
 
+function setOffset(px: number, animate: boolean) {
+  const root = document.documentElement;
+  root.style.setProperty("--ptr-offset", `${px}px`);
+  root.classList.toggle("ptr-animating", animate);
+}
+
 export function PullToRefresh() {
   const [enabled, setEnabled] = useState(false);
   const [pull, setPull] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
   const startY = useRef<number | null>(null);
-  const pullRef = useRef(0);
+  const pullRef = useRef<number>(0);
+  const readyRef = useRef<boolean>(false);
 
   useEffect(() => {
     if (!isStandalone()) return;
     setEnabled(true);
     document.documentElement.classList.add("standalone-app");
+
+    const reset = () => {
+      pullRef.current = 0;
+      readyRef.current = false;
+      setPull(0);
+      setOffset(0, true);
+    };
 
     const onStart = (event: TouchEvent) => {
       if (window.scrollY > 0 || event.touches.length !== 1 || insideScrolledArea(event.target)) {
@@ -45,15 +60,20 @@ export function PullToRefresh() {
 
     const onMove = (event: TouchEvent) => {
       if (startY.current === null) return;
-      const distance = event.touches[0].clientY - startY.current;
+      const distance = event.touches[0].clientY - startY.current - START_AFTER;
       if (distance <= 0 || window.scrollY > 0) {
-        pullRef.current = 0;
-        setPull(0);
+        if (pullRef.current !== 0) reset();
         return;
       }
-      const eased = Math.min(MAX_PULL, distance * 0.5);
+      const eased = Math.min(MAX_PULL, distance * 0.45);
       pullRef.current = eased;
       setPull(eased);
+      setOffset(eased * 0.6, false);
+      const ready = eased >= THRESHOLD;
+      if (ready && !readyRef.current && "vibrate" in navigator) {
+        navigator.vibrate(8);
+      }
+      readyRef.current = ready;
     };
 
     const onEnd = () => {
@@ -62,10 +82,10 @@ export function PullToRefresh() {
       if (pullRef.current >= THRESHOLD) {
         setRefreshing(true);
         setPull(THRESHOLD);
-        window.setTimeout(() => window.location.reload(), 150);
+        setOffset(48, true);
+        window.setTimeout(() => window.location.reload(), 250);
       } else {
-        pullRef.current = 0;
-        setPull(0);
+        reset();
       }
     };
 
@@ -83,19 +103,32 @@ export function PullToRefresh() {
 
   if (!enabled || (pull === 0 && !refreshing)) return null;
 
-  const ready = pull >= THRESHOLD;
+  const progress = Math.min(1, pull / THRESHOLD);
+  const ready = progress >= 1;
+
   return (
-    <div
-      className="ptr"
-      style={{ transform: `translate(-50%, ${pull - 52}px)`, opacity: Math.min(1, pull / 40) }}
-      aria-live="polite"
-    >
-      <div className={`ptr-circle ${refreshing ? "spinning" : ""}`} style={{ transform: refreshing ? undefined : `rotate(${pull * 3}deg)` }}>
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-          <path d="M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7" />
-        </svg>
+    <div className="ptr" style={{ opacity: Math.min(1, pull / 30) }} aria-live="polite">
+      <div className={`ptr-circle ${ready ? "ready" : ""}`}>
+        {refreshing ? (
+          <span className="ptr-spinner" />
+        ) : (
+          <svg
+            width="18"
+            height="18"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2.4"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden="true"
+            style={{ transform: `rotate(${progress * 180}deg)`, transition: "transform 0.12s ease" }}
+          >
+            <path d="M12 5v14M6 13l6 6 6-6" />
+          </svg>
+        )}
       </div>
-      <span className="sr-only">{refreshing ? "Refreshing" : ready ? "Release to refresh" : "Pull to refresh"}</span>
+      <span className="ptr-label">{refreshing ? "Refreshing…" : ready ? "Release to refresh" : "Pull to refresh"}</span>
     </div>
   );
 }
