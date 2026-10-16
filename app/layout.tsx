@@ -16,9 +16,6 @@ export const metadata: Metadata = {
     title: "Courtside",
     statusBarStyle: "default"
   },
-  icons: {
-    apple: "/icons/apple-touch-icon.png"
-  },
   formatDetection: {
     telephone: false
   }
