@@ -203,3 +203,39 @@ export async function inviteCoach(formData: FormData) {
     `Invitation created. Ask ${coach.full_name} to sign up at this site with ${coach.email} — they'll be connected automatically.`
   );
 }
+
+export async function linkCoachLogin(formData: FormData) {
+  const { supabase, org } = await requireSession(["admin"]);
+  const coachId = text(formData, "coach_id");
+  const userId = text(formData, "user_id");
+  const path = `/coaches/${coachId}`;
+  if (!userId) back(path, "error", "Choose the login to link.");
+
+  const { data: member } = await supabase
+    .from("memberships")
+    .select("id, role, full_name, email")
+    .eq("org_id", org.id)
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (!member) back(path, "error", "That person isn't on your team.");
+
+  await supabase.from("coaches").update({ user_id: null }).eq("org_id", org.id).eq("user_id", userId);
+  const { error } = await supabase.from("coaches").update({ user_id: userId }).eq("id", coachId);
+  if (error) back(path, "error", friendlyError(error));
+  if (member.role !== "coach") {
+    await supabase.from("memberships").update({ role: "coach" }).eq("id", member.id);
+  }
+  revalidatePath("/coaches");
+  revalidatePath(path);
+  back(path, "notice", `Linked. ${member.full_name || member.email} will now see this coach's sessions when they log in.`);
+}
+
+export async function unlinkCoachLogin(formData: FormData) {
+  const { supabase } = await requireSession(["admin"]);
+  const coachId = text(formData, "coach_id");
+  const path = `/coaches/${coachId}`;
+  const { error } = await supabase.from("coaches").update({ user_id: null }).eq("id", coachId);
+  if (error) back(path, "error", friendlyError(error));
+  revalidatePath(path);
+  back(path, "notice", "Login unlinked from this coach.");
+}

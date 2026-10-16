@@ -9,7 +9,7 @@ import { Card, EmptyState, Flash, PageHeader, StatusBadge } from "@/components/u
 import { Icon } from "@/components/icons";
 import { SubmitButton } from "@/components/buttons";
 import { CoachFields } from "../coach-fields";
-import { addTimeOff, deleteBlockedTime, saveAvailability, updateCoach } from "../actions";
+import { addTimeOff, deleteBlockedTime, linkCoachLogin, saveAvailability, unlinkCoachLogin, updateCoach } from "../actions";
 import { InviteForm } from "@/components/invite-form";
 import { WeeklyHoursEditor, type DaySchedule } from "@/components/weekly-hours-editor";
 import { appUrl } from "@/lib/env";
@@ -37,7 +37,7 @@ export default async function CoachPage({
   const canBlock = membership.role !== "coach" || isSelf;
   const tz = org.timezone;
 
-  const [availRes, breaksRes, blockedRes, upcomingRes, inviteRes] = await Promise.all([
+  const [availRes, breaksRes, blockedRes, upcomingRes, inviteRes, membersRes, linkedRes] = await Promise.all([
     supabase.from("coach_availability").select("*").eq("coach_id", id).order("weekday").order("start_time"),
     supabase.from("coach_breaks").select("*").eq("coach_id", id).order("weekday").order("start_time"),
     supabase.from("blocked_times").select("*").eq("coach_id", id).gte("ends_at", new Date().toISOString()).order("starts_at"),
@@ -51,8 +51,16 @@ export default async function CoachPage({
       .limit(15),
     isAdmin
       ? supabase.from("invitations").select("id, email, created_at").eq("coach_id", id).is("accepted_at", null).is("revoked_at", null).maybeSingle()
-      : Promise.resolve({ data: null })
+      : Promise.resolve({ data: null }),
+    isAdmin
+      ? supabase.from("memberships").select("user_id, full_name, email, role").eq("org_id", org.id).order("full_name")
+      : Promise.resolve({ data: [] as never[] }),
+    isAdmin ? supabase.from("coaches").select("user_id").eq("org_id", org.id).not("user_id", "is", null) : Promise.resolve({ data: [] as never[] })
   ]);
+  const members = (membersRes.data ?? []) as { user_id: string; full_name: string; email: string; role: string }[];
+  const linkedUserIds = new Set(((linkedRes.data ?? []) as { user_id: string }[]).map((row) => row.user_id));
+  const linkedMember = coach.user_id ? members.find((m) => m.user_id === coach.user_id) : undefined;
+  const linkable = members.filter((m) => !linkedUserIds.has(m.user_id) && m.role !== "admin");
 
   const availability = (availRes.data ?? []) as { weekday: number; start_time: string; end_time: string }[];
   const byDay = new Map(availability.map((a) => [a.weekday, a]));
@@ -200,13 +208,43 @@ export default async function CoachPage({
           {isAdmin ? (
             <Card title="Coach login" padded>
               {coach.user_id ? (
-                <p className="small muted">This coach can log in to see their schedule and manage their hours.</p>
+                <form action={unlinkCoachLogin} className="stack tight">
+                  <input type="hidden" name="coach_id" value={coach.id} />
+                  <p className="small muted">
+                    Linked to <strong>{linkedMember ? linkedMember.full_name || linkedMember.email : "a login"}</strong>
+                    {linkedMember && linkedMember.full_name ? ` (${linkedMember.email})` : ""}. They see this coach's sessions when they log in.
+                  </p>
+                  <SubmitButton size="small" variant="ghost" confirmText="Unlink this login? They won't see this coach's sessions anymore.">
+                    Unlink login
+                  </SubmitButton>
+                </form>
               ) : (
                 <div className="stack">
                   {invite ? (
                     <p className="small muted">
                       An invitation is waiting for <strong>{invite.email}</strong>. You can also create their login now.
                     </p>
+                  ) : null}
+                  {linkable.length > 0 ? (
+                    <form action={linkCoachLogin} className="stack tight" style={{ paddingBottom: 12, borderBottom: "1px solid var(--line)" }}>
+                      <input type="hidden" name="coach_id" value={coach.id} />
+                      <label className="field">
+                        <span>Already on your team? Link their login</span>
+                        <select className="input" name="user_id" defaultValue="" required>
+                          <option value="" disabled>
+                            Choose a team member…
+                          </option>
+                          {linkable.map((m) => (
+                            <option key={m.user_id} value={m.user_id}>
+                              {(m.full_name || m.email) + (m.role === "coach" ? " · coach" : ` · ${m.role}`)}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <SubmitButton size="small" variant="primary" icon="link">
+                        Link login
+                      </SubmitButton>
+                    </form>
                   ) : null}
                   <InviteForm appUrl={appUrl()} orgName={org.name} coachId={coach.id} coachEmail={coach.email} />
                 </div>

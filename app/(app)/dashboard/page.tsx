@@ -113,6 +113,11 @@ export default async function DashboardPage({
   ]);
 
   const summary = (summaryRes.data ?? {}) as Summary;
+  let unlinkedCoach = false;
+  if (membership.role === "coach") {
+    const { data: ownCoach } = await supabase.from("coaches").select("id").eq("org_id", org.id).eq("user_id", membership.user_id).maybeSingle();
+    unlinkedCoach = !ownCoach;
+  }
   const todays = (todayRes.data ?? []) as unknown as AppointmentWithRelations[];
   const attention = (attentionRes.data ?? []) as unknown as AppointmentWithRelations[];
 
@@ -154,6 +159,13 @@ export default async function DashboardPage({
         }
         actions={staff ? <ButtonLink href="/appointments/new" variant="primary" icon="plus">New appointment</ButtonLink> : null}
       />
+
+      {unlinkedCoach ? (
+        <Notice tone="warn">
+          Your login isn't linked to a coach profile yet, so no sessions can be shown. Ask an admin to open{" "}
+          <strong>Coaches → your name → Coach login</strong> and link your account.
+        </Notice>
+      ) : null}
 
       {setupIncomplete ? (
         <Card title="Get set up" className="anim-in" actions={<span className="small muted">{setupSteps.filter((s) => s.done).length} of {setupSteps.length} done</span>}>
