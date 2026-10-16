@@ -30,6 +30,20 @@ export default async function AccountPage({
             <SubmitButton variant="primary" size="small">Save</SubmitButton>
           </form>
         </Card>
+        <Card title="Install the app" padded>
+          <div className="stack tight small">
+            <p>
+              <strong>iPhone:</strong> open this site in Safari, tap the Share button, then <strong>Add to Home Screen</strong>.
+            </p>
+            <p>
+              <strong>Android:</strong> open it in Chrome, tap the ⋮ menu, then <strong>Install app</strong> or{" "}
+              <strong>Add to Home screen</strong>.
+            </p>
+            <p>
+              <strong>Mac or PC:</strong> in Chrome or Edge, click the install icon at the right of the address bar.
+            </p>
+          </div>
+        </Card>
         <Card title="Password" padded>
           <div className="stack">
             <p className="small muted">Choose a new password for signing in.</p>

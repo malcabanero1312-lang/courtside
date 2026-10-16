@@ -8,7 +8,19 @@ const fraunces = Fraunces({ subsets: ["latin"], variable: "--font-fraunces", dis
 
 export const metadata: Metadata = {
   title: { default: "Courtside", template: "%s · Courtside" },
-  description: "Tennis appointment management for coaches, agents and clubs."
+  description: "Tennis appointment management for coaches, agents and clubs.",
+  applicationName: "Courtside",
+  appleWebApp: {
+    capable: true,
+    title: "Courtside",
+    statusBarStyle: "default"
+  },
+  icons: {
+    apple: "/icons/apple-touch-icon.png"
+  },
+  formatDetection: {
+    telephone: false
+  }
 };
 
 export const viewport: Viewport = {
