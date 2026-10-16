@@ -12,7 +12,7 @@ import { Icon } from "@/components/icons";
 import { SubmitButton } from "@/components/buttons";
 import { WhatsAppPanel } from "@/components/whatsapp-panel";
 import { ResponseLinkBox } from "@/components/response-link-box";
-import { changeStatus, recordOfficeDecision, regenerateLink, updateAppointmentDetails } from "../actions";
+import { changeStatus, recordOfficeApproved, recordOfficeNotApproved, regenerateLink, updateAppointmentDetails } from "../actions";
 
 export const metadata: Metadata = { title: "Appointment" };
 
@@ -351,7 +351,7 @@ export default async function AppointmentPage({
                 </div>
               )}
               <Card title="What did the office decide?" padded>
-                <form action={recordOfficeDecision} className="stack">
+                <form action={recordOfficeApproved} className="stack">
                   <input type="hidden" name="id" value={appt.id} />
                   <input type="hidden" name="version" value={appt.version} />
                   <label className="field">
@@ -365,14 +365,13 @@ export default async function AppointmentPage({
                     <small>If the office doesn't approve, this note is included in the message to the student.</small>
                   </label>
                   <div className="row wrap">
-                    <SubmitButton variant="primary" icon="check" name="decision" value="approved">
+                    <SubmitButton variant="primary" icon="check" formAction={recordOfficeApproved}>
                       Office approved
                     </SubmitButton>
                     <SubmitButton
                       variant="danger"
                       icon="x"
-                      name="decision"
-                      value="not_approved"
+                      formAction={recordOfficeNotApproved}
                       confirmText="Record that the office did NOT approve? The time slot will be freed."
                     >
                       Office didn't approve

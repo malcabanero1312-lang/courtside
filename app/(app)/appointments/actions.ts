@@ -277,12 +277,18 @@ export async function logWhatsApp(
   return { ok: true };
 }
 
-export async function recordOfficeDecision(formData: FormData) {
+export async function recordOfficeApproved(formData: FormData) {
+  await saveOfficeDecision(formData, "approved");
+}
+
+export async function recordOfficeNotApproved(formData: FormData) {
+  await saveOfficeDecision(formData, "not_approved");
+}
+
+async function saveOfficeDecision(formData: FormData, decision: "approved" | "not_approved") {
   const { supabase } = await requireSession();
   const id = text(formData, "id");
-  const decision = text(formData, "decision");
   const path = `/appointments/${id}`;
-  if (decision !== "approved" && decision !== "not_approved") back(path, "error", "Choose what the office decided.");
   const { error } = await supabase.rpc("record_office_decision", {
     p_appointment: id,
     p_decision: decision,

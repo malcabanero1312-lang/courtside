@@ -14,7 +14,8 @@ export function SubmitButton({
   name,
   value,
   confirmText,
-  disabled
+  disabled,
+  formAction
 }: {
   children: ReactNode;
   pendingText?: string;
@@ -26,6 +27,7 @@ export function SubmitButton({
   value?: string;
   confirmText?: string;
   disabled?: boolean;
+  formAction?: (formData: FormData) => void | Promise<void>;
 }) {
   const { pending } = useFormStatus();
   return (
@@ -33,6 +35,7 @@ export function SubmitButton({
       type="submit"
       name={name}
       value={value}
+      formAction={formAction}
       disabled={pending || disabled}
       className={`btn ${variant ?? ""} ${size ?? ""} ${block ? "block" : ""}`}
       onClick={(event) => {
