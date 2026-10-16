@@ -1,0 +1,190 @@
+import type { Metadata } from "next";
+import Link from "next/link";
+import { requireSession, isStaff } from "@/lib/session";
+import { APPOINTMENT_SELECT, type AppointmentWithRelations, type Coach, type Venue } from "@/lib/types";
+import { formatTime, STATUS_META } from "@/lib/format";
+import { addDays, isValidDateInput, startOfWeek, todayInZone, utcToZonedInputs, zonedToUtc } from "@/lib/time";
+import { PageHeader, one } from "@/components/ui";
+import { Icon } from "@/components/icons";
+
+export const metadata: Metadata = { title: "Calendar" };
+
+const DAY_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+
+export default async function CalendarPage({
+  searchParams
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  const params = await searchParams;
+  const { supabase, org, membership } = await requireSession();
+  const tz = org.timezone;
+  const staff = isStaff(membership.role);
+  const today = todayInZone(tz);
+  const requested = one(params.week);
+  const weekStart = startOfWeek(isValidDateInput(requested) ? requested : today);
+  const days = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
+  const coachFilter = one(params.coach);
+  const venueFilter = one(params.venue);
+  const showCancelled = one(params.cancelled) === "1";
+
+  let query = supabase
+    .from("appointments")
+    .select(APPOINTMENT_SELECT)
+    .eq("org_id", org.id)
+    .gte("starts_at", zonedToUtc(weekStart, "00:00", tz).toISOString())
+    .lt("starts_at", zonedToUtc(addDays(weekStart, 7), "00:00", tz).toISOString())
+    .neq("status", "rescheduled")
+    .order("starts_at");
+  if (!showCancelled) query = query.not("status", "in", "(cancelled,declined)");
+  if (coachFilter) query = query.eq("coach_id", coachFilter);
+  if (venueFilter) query = query.eq("venue_id", venueFilter);
+
+  const [{ data }, coachesRes, venuesRes] = await Promise.all([
+    query,
+    supabase.from("coaches").select("id, full_name, color, is_active").eq("org_id", org.id).order("full_name"),
+    supabase.from("venues").select("id, name").eq("org_id", org.id).order("name")
+  ]);
+  const appointments = (data ?? []) as unknown as AppointmentWithRelations[];
+  const coaches = (coachesRes.data ?? []) as Pick<Coach, "id" | "full_name" | "color" | "is_active">[];
+  const venues = (venuesRes.data ?? []) as Pick<Venue, "id" | "name">[];
+
+  const byDay = new Map<string, AppointmentWithRelations[]>();
+  for (const a of appointments) {
+    const key = utcToZonedInputs(a.starts_at, tz).date;
+    byDay.set(key, [...(byDay.get(key) ?? []), a]);
+  }
+
+  const link = (overrides: Record<string, string>) => {
+    const p = new URLSearchParams();
+    const merged = { week: weekStart, coach: coachFilter, venue: venueFilter, cancelled: showCancelled ? "1" : "", ...overrides };
+    Object.entries(merged).forEach(([k, v]) => {
+      if (v) p.set(k, v);
+    });
+    return `/calendar?${p.toString()}`;
+  };
+
+  const monthLabel = new Intl.DateTimeFormat("en-GB", { month: "long", year: "numeric", timeZone: "UTC" }).format(
+    new Date(`${weekStart}T12:00:00Z`)
+  );
+
+  return (
+    <>
+      <PageHeader
+        title={monthLabel}
+        subtitle={`Week of ${new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", timeZone: "UTC" }).format(new Date(`${weekStart}T12:00:00Z`))} · ${appointments.length} session${appointments.length === 1 ? "" : "s"}`}
+        actions={
+          <>
+            <Link className="btn small" href={link({ week: addDays(weekStart, -7) })} aria-label="Previous week">
+              <Icon name="chevronLeft" size={16} />
+            </Link>
+            <Link className="btn small" href={link({ week: today })}>
+              This week
+            </Link>
+            <Link className="btn small" href={link({ week: addDays(weekStart, 7) })} aria-label="Next week">
+              <Icon name="chevronRight" size={16} />
+            </Link>
+          </>
+        }
+      />
+
+      <section className="card">
+        <form className="toolbar" method="get">
+          <input type="hidden" name="week" value={weekStart} />
+          {coaches.length > 1 && membership.role !== "coach" ? (
+            <label className="field">
+              <span>Coach</span>
+              <select className="input" name="coach" defaultValue={coachFilter}>
+                <option value="">All coaches</option>
+                {coaches.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.full_name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
+          {venues.length > 1 ? (
+            <label className="field">
+              <span>Venue</span>
+              <select className="input" name="venue" defaultValue={venueFilter}>
+                <option value="">All venues</option>
+                {venues.map((v) => (
+                  <option key={v.id} value={v.id}>
+                    {v.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
+          <label className="check small" style={{ paddingBottom: 10 }}>
+            <input type="checkbox" name="cancelled" value="1" defaultChecked={showCancelled} /> Show cancelled
+          </label>
+          <button className="btn small" type="submit">
+            Apply
+          </button>
+          <div className="row wrap" style={{ marginLeft: "auto", gap: 12 }}>
+            {coaches
+              .filter((c) => c.is_active)
+              .slice(0, 8)
+              .map((c) => (
+                <span key={c.id} className="row small" style={{ gap: 6 }}>
+                  <span className="coach-dot" style={{ background: c.color }} />
+                  {c.full_name}
+                </span>
+              ))}
+          </div>
+        </form>
+
+        <div className="week">
+          {days.map((day, index) => {
+            const items = byDay.get(day) ?? [];
+            const dayNumber = Number(day.slice(8, 10));
+            return (
+              <div key={day} className={`week-day ${day === today ? "today" : ""}`}>
+                <div className="week-day-head">
+                  <strong>{dayNumber}</strong>
+                  <span className="small muted">{DAY_NAMES[index]}</span>
+                  {staff && day >= today ? (
+                    <Link href={`/appointments/new?date=${day}${coachFilter ? `&coach=${coachFilter}` : ""}`} className="btn ghost small" style={{ marginLeft: "auto", height: 24, padding: "0 6px" }} title="Book on this day">
+                      <Icon name="plus" size={14} />
+                    </Link>
+                  ) : null}
+                </div>
+                {items.length === 0 ? <span className="small faint" style={{ padding: "0 4px" }}>—</span> : null}
+                {items.map((a) => {
+                  const dim = a.status === "cancelled" || a.status === "declined";
+                  return (
+                    <Link
+                      key={a.id}
+                      href={`/appointments/${a.id}`}
+                      className={`cal-item ${dim ? "dim" : ""}`}
+                      style={{ borderLeftColor: a.coach?.color ?? "var(--court-2)" }}
+                      title={STATUS_META[a.status].label}
+                    >
+                      <div className="mono" style={{ fontWeight: 650 }}>
+                        {formatTime(a.starts_at, tz)}–{formatTime(a.ends_at, tz)}
+                      </div>
+                      <div className="truncate" style={{ fontWeight: 600 }}>
+                        {a.student?.full_name}
+                      </div>
+                      <div className="truncate muted">
+                        {a.coach?.full_name}
+                        {a.court ? ` · ${a.court.name}` : ""}
+                      </div>
+                      <div style={{ marginTop: 4 }}>
+                        <span className={`badge tone-${STATUS_META[a.status].tone}`} style={{ height: 18, fontSize: 10.5, padding: "0 6px" }}>
+                          {STATUS_META[a.status].label}
+                        </span>
+                      </div>
+                    </Link>
+                  );
+                })}
+              </div>
+            );
+          })}
+        </div>
+      </section>
+    </>
+  );
+}
