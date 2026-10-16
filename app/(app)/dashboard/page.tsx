@@ -15,6 +15,9 @@ interface Summary {
   to_contact: number;
   awaiting: number;
   awaiting_overdue: number;
+  office_pending: number;
+  office_not_sent: number;
+  results_to_send: number;
   reschedule_requests: number;
   declined_upcoming: number;
   to_close: number;
@@ -73,14 +76,22 @@ export default async function DashboardPage({
       .eq("org_id", org.id)
       .gte("starts_at", range.start)
       .lt("starts_at", range.end)
-      .not("status", "in", "(rescheduled,cancelled,declined)")
+      .not("status", "in", "(rescheduled,cancelled,declined,not_approved)")
       .order("starts_at"),
     staff
       ? supabase
           .from("appointments")
           .select(APPOINTMENT_SELECT)
           .eq("org_id", org.id)
-          .or(`status.eq.reschedule_requested,and(status.eq.scheduled,starts_at.gte."${now}"),and(status.eq.awaiting_response,starts_at.gte."${now}")`)
+          .or(
+            [
+              "status.eq.reschedule_requested",
+              `and(status.eq.pending_approval,starts_at.gte."${now}")`,
+              `and(status.in.(confirmed,not_approved),student_informed_at.is.null,starts_at.gte."${now}")`,
+              `and(status.eq.scheduled,starts_at.gte."${now}")`,
+              `and(status.eq.awaiting_response,starts_at.gte."${now}")`
+            ].join(",")
+          )
           .order("starts_at")
           .limit(12)
       : supabase
@@ -88,7 +99,7 @@ export default async function DashboardPage({
           .select(APPOINTMENT_SELECT)
           .eq("org_id", org.id)
           .gte("starts_at", range.end)
-          .not("status", "in", "(rescheduled,cancelled,declined)")
+          .not("status", "in", "(rescheduled,cancelled,declined,not_approved)")
           .order("starts_at")
           .limit(10),
     staff
@@ -136,7 +147,7 @@ export default async function DashboardPage({
         title={`${greeting(tz)}, ${firstName(membership.full_name) || "there"}`}
         subtitle={
           staff
-            ? summary.reschedule_requests || summary.awaiting_overdue || summary.to_close
+            ? summary.reschedule_requests || summary.awaiting_overdue || summary.to_close || summary.office_not_sent || summary.results_to_send
               ? "A few things need your attention today."
               : "Everything is on track."
             : "Here are your sessions."
@@ -192,6 +203,15 @@ export default async function DashboardPage({
               <span className="kpi-label">Awaiting reply</span>
               <span className="kpi-value">{summary.awaiting ?? 0}</span>
               {summary.awaiting_overdue ? <span className="kpi-note">{summary.awaiting_overdue} need a follow-up</span> : null}
+            </Link>
+            <Link href="/appointments?view=office" className="card kpi">
+              <span className="kpi-label">Waiting for office</span>
+              <span className="kpi-value">{summary.office_pending ?? 0}</span>
+              {summary.office_not_sent ? <span className="kpi-note">{summary.office_not_sent} not sent to the office yet</span> : null}
+            </Link>
+            <Link href="/appointments?view=tell_student" className="card kpi">
+              <span className="kpi-label">Tell student the result</span>
+              <span className="kpi-value">{summary.results_to_send ?? 0}</span>
             </Link>
             <Link href="/appointments?view=reschedule" className="card kpi">
               <span className="kpi-label">New time requested</span>

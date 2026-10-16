@@ -70,7 +70,9 @@ export function formatPhone(digits: string | null | undefined): string {
 export const STATUS_META: Record<AppointmentStatus, { label: string; tone: string; hint: string }> = {
   scheduled: { label: "To contact", tone: "slate", hint: "Booked, student not messaged yet" },
   awaiting_response: { label: "Awaiting reply", tone: "amber", hint: "Message sent, waiting for the student" },
-  confirmed: { label: "Confirmed", tone: "green", hint: "Student confirmed" },
+  pending_approval: { label: "Waiting for office", tone: "ball", hint: "Student confirmed — the office still needs to approve" },
+  confirmed: { label: "Confirmed", tone: "green", hint: "Approved by the office" },
+  not_approved: { label: "Not approved", tone: "red", hint: "The office did not approve this booking" },
   reschedule_requested: { label: "Wants new time", tone: "violet", hint: "Student asked for another time" },
   declined: { label: "Declined", tone: "red", hint: "Student declined" },
   cancelled: { label: "Cancelled", tone: "muted", hint: "Cancelled by staff" },

@@ -21,7 +21,11 @@ const DESCRIPTIONS: Record<string, string> = {
   student_reminder: "Emailed automatically before the session.",
   staff_student_response: "Emailed to the coach and agent when a student responds.",
   staff_cancelled: "Emailed to the coach when a session is cancelled.",
-  staff_rescheduled: "Emailed to the coach when a session is moved."
+  staff_rescheduled: "Emailed to the coach when a session is moved.",
+  office_request: "Sent by the coach or agent to the office after the student confirms.",
+  office_approved: "Sent to the student when the office approves.",
+  office_not_approved: "Sent to the student when the office doesn't approve.",
+  student_not_approved: "Emailed to the student when the office doesn't approve."
 };
 
 function TemplateCard({ template }: { template: MessageTemplate }) {

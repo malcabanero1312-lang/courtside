@@ -43,7 +43,7 @@ export default async function CoachPage({
       .select(APPOINTMENT_SELECT)
       .eq("coach_id", id)
       .gte("starts_at", new Date().toISOString())
-      .in("status", ["scheduled", "awaiting_response", "confirmed", "reschedule_requested"])
+      .in("status", ["scheduled", "awaiting_response", "pending_approval", "confirmed", "reschedule_requested"])
       .order("starts_at")
       .limit(15),
     isAdmin

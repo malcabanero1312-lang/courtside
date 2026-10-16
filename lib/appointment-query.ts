@@ -8,10 +8,12 @@ export const VIEWS = [
   { key: "to_contact", label: "To contact" },
   { key: "awaiting", label: "Awaiting reply" },
   { key: "reschedule", label: "New time requested" },
+  { key: "office", label: "Waiting for office" },
+  { key: "tell_student", label: "Tell student result" },
   { key: "confirmed", label: "Confirmed" },
   { key: "to_close", label: "To close" },
   { key: "past", label: "Past" },
-  { key: "cancelled", label: "Cancelled & declined" },
+  { key: "cancelled", label: "Cancelled & not going ahead" },
   { key: "all", label: "All" }
 ] as const;
 
@@ -74,7 +76,7 @@ export async function queryAppointments(
 
   switch (filters.view) {
     case "upcoming":
-      query = query.gte("ends_at", now).not("status", "in", "(cancelled,rescheduled,declined)");
+      query = query.gte("ends_at", now).not("status", "in", "(cancelled,rescheduled,declined,not_approved)");
       break;
     case "to_contact":
       query = query.gte("starts_at", now).eq("status", "scheduled");
@@ -85,17 +87,23 @@ export async function queryAppointments(
     case "reschedule":
       query = query.eq("status", "reschedule_requested");
       break;
+    case "office":
+      query = query.gte("starts_at", now).eq("status", "pending_approval");
+      break;
+    case "tell_student":
+      query = query.gte("starts_at", now).in("status", ["confirmed", "not_approved"]).is("student_informed_at", null);
+      break;
     case "confirmed":
       query = query.gte("starts_at", now).eq("status", "confirmed");
       break;
     case "to_close":
-      query = query.lt("ends_at", now).in("status", ["scheduled", "awaiting_response", "confirmed"]);
+      query = query.lt("ends_at", now).in("status", ["scheduled", "awaiting_response", "pending_approval", "confirmed"]);
       break;
     case "past":
       query = query.lt("starts_at", now).not("status", "eq", "rescheduled");
       break;
     case "cancelled":
-      query = query.in("status", ["cancelled", "declined", "rescheduled"]);
+      query = query.in("status", ["cancelled", "declined", "not_approved", "rescheduled"]);
       break;
     default:
       break;

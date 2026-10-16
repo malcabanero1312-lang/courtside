@@ -38,6 +38,7 @@ Wait until it finishes. A few "warn" lines are normal.
 3. In the left menu, open **SQL Editor** → **New query**.
 4. In VS Code, open `supabase/migrations/0001_schema.sql`, select everything (Ctrl+A), copy, paste into the Supabase SQL editor, and click **Run**. You should see "Success. No rows returned".
 5. Do the same with `supabase/migrations/0002_functions_and_security.sql`.
+6. And then `supabase/migrations/0003_office_approval.sql` (adds the office approval step).
 
 > Run them in that order, once. If you see an error, read the first red line — it usually says what's wrong. Running a file twice will show "already exists" errors; that's harmless.
 
@@ -176,6 +177,8 @@ The dashboard warns you if the job hasn't run in the past day.
 **Send the WhatsApp message** → after saving you land on the appointment. Click **Open WhatsApp**, press Send inside WhatsApp, then click **Yes, mark as sent**. The app never assumes a message was sent just because WhatsApp opened.
 
 **The student answers** → they tap the link in the message and choose *Confirm*, *I need a different time*, or *I can't make it*. The appointment updates instantly, and the coach and agent get an email.
+
+**Office approval** → when a student confirms, the appointment shows **Waiting for office**. On the appointment page, the coach or agent sends the ready-made message to the office (one tap with WhatsApp if the office number is saved in Settings, or Copy). When the office replies, click **Office approved** or **Office didn't approve**. A ready message to the student with the result appears next — send it and click **Yes, mark as sent**. The dashboard shows how many bookings are waiting for the office and how many students still need to hear the result.
 
 **Reschedule** → open the appointment → Reschedule. The old booking is kept in the history as "Moved", a new one is created, and the old student link stops working.
 

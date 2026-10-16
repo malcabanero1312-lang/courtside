@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireSession } from "@/lib/session";
 import { friendlyError } from "@/lib/errors";
+import { normalizePhone } from "@/lib/whatsapp";
 
 function text(formData: FormData, key: string): string {
   return String(formData.get(key) ?? "").trim();
@@ -24,6 +25,9 @@ export async function updateOrganization(formData: FormData) {
   const replyTo = text(formData, "reply_to_email").toLowerCase();
   if (replyTo && !/^[^@\s,()]+@[^@\s,()]+\.[^@\s,()]+$/.test(replyTo)) back("/settings", "error", "The reply-to email doesn't look right.");
   const color = text(formData, "brand_color");
+  const rawOfficePhone = text(formData, "office_phone");
+  const officePhone = normalizePhone(rawOfficePhone, org.default_country_code);
+  if (rawOfficePhone && !officePhone) back("/settings", "error", "The office WhatsApp number doesn't look right. Include the area code.");
   const { error } = await supabase
     .from("organizations")
     .update({
@@ -42,7 +46,9 @@ export async function updateOrganization(formData: FormData) {
       notify_student_email: formData.get("notify_student_email") === "on",
       notify_coach_email: formData.get("notify_coach_email") === "on",
       notify_agent_email: formData.get("notify_agent_email") === "on",
-      cancellation_policy: text(formData, "cancellation_policy") || null
+      cancellation_policy: text(formData, "cancellation_policy") || null,
+      office_name: text(formData, "office_name") || null,
+      office_phone: officePhone
     })
     .eq("id", org.id);
   if (error) back("/settings", "error", friendlyError(error));

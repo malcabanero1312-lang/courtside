@@ -6,6 +6,10 @@ import { SubmitButton } from "@/components/buttons";
 import { Icon } from "@/components/icons";
 
 const DONE: Record<string, { title: string; body: string }> = {
+  pending_approval: {
+    title: "Thank you!",
+    body: "We've received your confirmation. The club office will finalise your booking, and we'll message you as soon as it's approved."
+  },
   confirmed: { title: "You're confirmed!", body: "Thank you. We've let your coach know. See you on court." },
   declined: { title: "Thanks for letting us know", body: "We've released this time. We'll be in touch if you'd like to book again." },
   reschedule_requested: {
@@ -16,11 +20,11 @@ const DONE: Record<string, { title: string; body: string }> = {
 
 export function ResponseForm({ token, currentStatus }: { token: string; currentStatus: string }) {
   const [state, action] = useActionState<ResponseState, FormData>(submitResponse, {});
-  const [choice, setChoice] = useState<string>(currentStatus === "confirmed" ? "" : "confirm");
+  const [choice, setChoice] = useState<string>(currentStatus === "confirmed" || currentStatus === "pending_approval" ? "" : "confirm");
   const [note, setNote] = useState("");
 
   if (state.ok && state.status) {
-    const done = DONE[state.status] ?? DONE.confirmed;
+    const done = DONE[state.status] ?? DONE.pending_approval;
     return (
       <div className="empty anim-in" style={{ padding: "28px 8px" }}>
         <div className="empty-icon" style={{ background: "var(--ball)", color: "var(--court)" }}>

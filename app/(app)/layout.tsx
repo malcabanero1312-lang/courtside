@@ -47,7 +47,12 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
     const { data } = await supabase.rpc("dashboard_summary", { p_org: org.id });
     if (data) {
       const summary = data as Record<string, number>;
-      attention = (summary.reschedule_requests ?? 0) + (summary.awaiting_overdue ?? 0) + (summary.to_close ?? 0);
+      attention =
+        (summary.reschedule_requests ?? 0) +
+        (summary.awaiting_overdue ?? 0) +
+        (summary.to_close ?? 0) +
+        (summary.office_not_sent ?? 0) +
+        (summary.results_to_send ?? 0);
     }
   }
 

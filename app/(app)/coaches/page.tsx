@@ -32,7 +32,7 @@ export default async function CoachesPage({
     .select("coach_id, status")
     .eq("org_id", org.id)
     .gte("starts_at", new Date().toISOString())
-    .in("status", ["scheduled", "awaiting_response", "confirmed", "reschedule_requested"]);
+    .in("status", ["scheduled", "awaiting_response", "pending_approval", "confirmed", "reschedule_requested"]);
   const upcomingByCoach = new Map<string, number>();
   for (const row of (recent ?? []) as { coach_id: string }[]) {
     upcomingByCoach.set(row.coach_id, (upcomingByCoach.get(row.coach_id) ?? 0) + 1);

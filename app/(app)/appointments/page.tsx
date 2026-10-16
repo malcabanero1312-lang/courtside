@@ -281,7 +281,8 @@ export default async function AppointmentsPage({
               <div className="row wrap" style={{ padding: "12px 16px", borderTop: "1px solid var(--line)" }}>
                 <select className="input" name="bulk_action" defaultValue="" style={{ width: "auto" }} aria-label="Bulk action">
                   <option value="">With selected…</option>
-                  <option value="confirm">Mark confirmed</option>
+                  <option value="confirm">Student confirmed</option>
+                  <option value="office_approved">Office approved</option>
                   <option value="complete">Mark completed</option>
                   <option value="no_show">Mark no-show</option>
                   <option value="cancel">Cancel</option>

@@ -36,7 +36,7 @@ export default async function CalendarPage({
     .lt("starts_at", zonedToUtc(addDays(weekStart, 7), "00:00", tz).toISOString())
     .neq("status", "rescheduled")
     .order("starts_at");
-  if (!showCancelled) query = query.not("status", "in", "(cancelled,declined)");
+  if (!showCancelled) query = query.not("status", "in", "(cancelled,declined,not_approved)");
   if (coachFilter) query = query.eq("coach_id", coachFilter);
   if (venueFilter) query = query.eq("venue_id", venueFilter);
 
@@ -153,7 +153,7 @@ export default async function CalendarPage({
                 </div>
                 {items.length === 0 ? <span className="small faint" style={{ padding: "0 4px" }}>—</span> : null}
                 {items.map((a) => {
-                  const dim = a.status === "cancelled" || a.status === "declined";
+                  const dim = a.status === "cancelled" || a.status === "declined" || a.status === "not_approved";
                   return (
                     <Link
                       key={a.id}

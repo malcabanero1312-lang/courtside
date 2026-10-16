@@ -21,7 +21,9 @@ export const PLACEHOLDERS: { key: string; description: string }[] = [
   { key: "student_note", description: "Note the student left" },
   { key: "cancellation_reason_line", description: "“Reason: …” when a reason was given" },
   { key: "cancellation_policy", description: "Your cancellation policy text" },
-  { key: "appointment_url", description: "Staff link to the appointment" }
+  { key: "appointment_url", description: "Staff link to the appointment" },
+  { key: "office_name", description: "Name of the office contact (from Settings)" },
+  { key: "office_note_line", description: "“Note from the office: …” when the office left a note" }
 ];
 
 export function renderTemplate(body: string, vars: Record<string, string>): string {
@@ -33,7 +35,7 @@ export function renderTemplate(body: string, vars: Record<string, string>): stri
 
 export function buildTemplateVars(input: {
   appointment: AppointmentWithRelations;
-  org: Pick<Organization, "name" | "timezone" | "cancellation_policy">;
+  org: Pick<Organization, "name" | "timezone" | "cancellation_policy"> & Partial<Pick<Organization, "office_name">>;
   responseLink?: string | null;
   agentName?: string | null;
   appointmentUrl?: string;
@@ -59,7 +61,18 @@ export function buildTemplateVars(input: {
     agent_name: input.agentName || a.agent?.full_name || org.name,
     org_name: org.name,
     status_label: label,
-    status_label_lower: a.status === "reschedule_requested" ? "asked for a new time" : label.toLowerCase(),
+    status_label_lower:
+      a.status === "reschedule_requested"
+        ? "asked for a new time"
+        : a.status === "pending_approval"
+          ? "confirmed (needs office approval)"
+          : label.toLowerCase(),
+    office_hint:
+      a.status === "pending_approval"
+        ? "Next step: message the office for approval. The message is ready on the appointment page."
+        : "",
+    office_name: org.office_name || "team",
+    office_note_line: a.office_note ? `Note from the office: ${a.office_note}` : "",
     student_note: a.student_note || "—",
     cancellation_reason_line: a.cancellation_reason ? `Reason: ${a.cancellation_reason}` : "",
     cancellation_policy: org.cancellation_policy ?? "",

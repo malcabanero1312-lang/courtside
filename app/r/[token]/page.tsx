@@ -149,7 +149,15 @@ export default async function PortalPage({ params }: { params: Promise<{ token: 
             {status === "confirmed" ? (
               <div className="notice success" style={{ margin: 0 }}>
                 <Icon name="checkCircle" size={17} />
-                <div>You've confirmed this session. If something changes, let us know below.</div>
+                <div>Your booking is confirmed by the club. If something changes, let us know below.</div>
+              </div>
+            ) : status === "pending_approval" ? (
+              <div className="notice info" style={{ margin: 0 }}>
+                <Icon name="clock" size={17} />
+                <div>
+                  Thanks for confirming! The club office is finalising your booking, and we'll message you once it's approved. If
+                  something changes, let us know below.
+                </div>
               </div>
             ) : status === "reschedule_requested" ? (
               <div className="notice info" style={{ margin: 0 }}>
@@ -174,8 +182,18 @@ export default async function PortalPage({ params }: { params: Promise<{ token: 
           <Message title="This session has passed" body="Thanks for training with us. Message us any time to book again." />
         ) : (
           <Message
-            title={status === "cancelled" ? "This session was cancelled" : "This booking can't be changed online"}
-            body="Please message us on WhatsApp if you have any questions."
+            title={
+              status === "cancelled"
+                ? "This session was cancelled"
+                : status === "not_approved"
+                  ? "The club couldn't confirm this time"
+                  : "This booking can't be changed online"
+            }
+            body={
+              status === "not_approved"
+                ? "We're sorry. We'll message you to find another time that works."
+                : "Please message us on WhatsApp if you have any questions."
+            }
           />
         )}
 

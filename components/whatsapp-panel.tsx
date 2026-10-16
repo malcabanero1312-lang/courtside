@@ -19,7 +19,10 @@ export function WhatsAppPanel({
   messages,
   defaultKey,
   highlight,
-  studentName
+  studentName,
+  target = "student",
+  title,
+  doneText
 }: {
   appointmentId: string;
   phone: string | null;
@@ -27,6 +30,9 @@ export function WhatsAppPanel({
   defaultKey: string;
   highlight?: boolean;
   studentName: string;
+  target?: "student" | "office";
+  title?: string;
+  doneText?: string;
 }) {
   const router = useRouter();
   const [key, setKey] = useState(defaultKey);
@@ -52,24 +58,26 @@ export function WhatsAppPanel({
           <span style={{ color: "#1f8f4e", display: "inline-flex" }}>
             <Icon name="whatsapp" size={18} />
           </span>
-          Message {studentName.split(" ")[0]} on WhatsApp
+          {title ?? `Message ${studentName.split(" ")[0]} on WhatsApp`}
         </div>
-        <select
-          className="input"
-          style={{ width: "auto", height: 32 }}
-          value={key}
-          onChange={(event) => {
-            setKey(event.target.value);
-            setOpened(false);
-          }}
-          aria-label="Message template"
-        >
-          {messages.map((m) => (
-            <option key={m.key} value={m.key}>
-              {m.name}
-            </option>
-          ))}
-        </select>
+        {messages.length > 1 ? (
+          <select
+            className="input"
+            style={{ width: "auto", height: 32 }}
+            value={key}
+            onChange={(event) => {
+              setKey(event.target.value);
+              setOpened(false);
+            }}
+            aria-label="Message template"
+          >
+            {messages.map((m) => (
+              <option key={m.key} value={m.key}>
+                {m.name}
+              </option>
+            ))}
+          </select>
+        ) : null}
       </div>
       <div className="card-body stack">
         <textarea
@@ -83,7 +91,7 @@ export function WhatsAppPanel({
         {done ? (
           <div className="notice success" style={{ margin: 0 }}>
             <Icon name="checkCircle" size={17} />
-            <div>Recorded as sent. You'll see the student's answer here as soon as they reply.</div>
+            <div>{doneText ?? "Recorded as sent. You'll see the student's answer here as soon as they reply."}</div>
           </div>
         ) : null}
         {phone ? (
@@ -96,22 +104,24 @@ export function WhatsAppPanel({
               onClick={() => {
                 setOpened(true);
                 setError(null);
-                logWhatsApp(appointmentId, "opened", key).catch(() => undefined);
+                logWhatsApp(appointmentId, "opened", key, target).catch(() => undefined);
               }}
             >
               <Icon name="whatsapp" size={18} />
               Open WhatsApp
             </a>
-            <CopyButton text={text} label="Copy text" />
+            <CopyButton text={text} label="Copy text" onCopied={() => setOpened(true)} />
             <span className="small muted">To +{phone}</span>
           </div>
         ) : (
           <div className="notice warn" style={{ margin: 0 }}>
             <Icon name="phone" size={17} />
             <div>
-              This student has no WhatsApp number. Add one on their profile, or copy the message and send it another way.
+              {target === "office"
+                ? "No office WhatsApp number is saved. Copy the message and send it in your usual chat with the office (an admin can add the number in Settings)."
+                : "This student has no WhatsApp number. Add one on their profile, or copy the message and send it another way."}
               <div style={{ marginTop: 8 }}>
-                <CopyButton text={text} label="Copy message" />
+                <CopyButton text={text} label="Copy message" onCopied={() => setOpened(true)} />
               </div>
             </div>
           </div>
@@ -120,8 +130,8 @@ export function WhatsAppPanel({
           <div className="card card-pad anim-in" style={{ background: "var(--surface-2)" }}>
             <div className="row between wrap">
               <div>
-                <div style={{ fontWeight: 650 }}>Did you press Send in WhatsApp?</div>
-                <div className="small muted">We can't see inside WhatsApp, so please confirm it went out.</div>
+                <div style={{ fontWeight: 650 }}>{target === "office" ? "Did you send it to the office?" : "Did you send the message?"}</div>
+                <div className="small muted">We can't see inside WhatsApp or other chats, so please confirm it went out.</div>
               </div>
               <button
                 type="button"
@@ -129,7 +139,7 @@ export function WhatsAppPanel({
                 disabled={pending}
                 onClick={() =>
                   startTransition(async () => {
-                    const result = await logWhatsApp(appointmentId, "sent", key);
+                    const result = await logWhatsApp(appointmentId, "sent", key, target);
                     if (result.ok) {
                       setDone(true);
                       router.refresh();

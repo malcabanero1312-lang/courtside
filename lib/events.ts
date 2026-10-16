@@ -26,6 +26,7 @@ export function describeEvent(
       const from = String(d.from ?? "");
       if (event.actor_type === "student") {
         const verbs: Record<string, string> = {
+          pending_approval: "Student confirmed — now waiting for the office",
           confirmed: "Student confirmed",
           declined: "Student declined",
           reschedule_requested: "Student asked for another time"
@@ -36,6 +37,13 @@ export function describeEvent(
         };
       }
       if (to === "rescheduled") return { title: `${who} moved this session to a new time` };
+      if (to === "confirmed" && from === "pending_approval") {
+        return { title: `${who} recorded: the office approved`, detail: d.office_note ? `Office note: ${String(d.office_note)}` : undefined };
+      }
+      if (to === "not_approved") {
+        return { title: `${who} recorded: the office did not approve`, detail: d.office_note ? `Office note: ${String(d.office_note)}` : undefined };
+      }
+      if (to === "pending_approval") return { title: `${who} recorded that the student confirmed — now waiting for the office` };
       return {
         title: `${who} changed status: ${statusLabel(from)} → ${statusLabel(to)}`,
         detail: d.reason ? `Reason: ${String(d.reason)}` : undefined
@@ -59,6 +67,10 @@ export function describeEvent(
       return { title: `${who} opened WhatsApp with the message` };
     case "whatsapp_marked_sent":
       return { title: `${who} confirmed the WhatsApp message was sent` };
+    case "office_message_opened":
+      return { title: `${who} opened WhatsApp with the message to the office` };
+    case "office_messaged":
+      return { title: `${who} sent the booking to the office for approval` };
     case "link_copied":
       return { title: `${who} copied the response link` };
     case "link_regenerated":

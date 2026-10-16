@@ -3,7 +3,9 @@ export type Role = "admin" | "agent" | "coach";
 export type AppointmentStatus =
   | "scheduled"
   | "awaiting_response"
+  | "pending_approval"
   | "confirmed"
+  | "not_approved"
   | "reschedule_requested"
   | "declined"
   | "cancelled"
@@ -27,6 +29,8 @@ export interface Organization {
   notify_coach_email: boolean;
   notify_agent_email: boolean;
   cancellation_policy: string | null;
+  office_name: string | null;
+  office_phone: string | null;
 }
 
 export interface Membership {
@@ -115,6 +119,9 @@ export interface Appointment {
   contacted_at: string | null;
   responded_at: string | null;
   reminder_queued_at: string | null;
+  office_contacted_at: string | null;
+  student_informed_at: string | null;
+  office_note: string | null;
   created_at: string;
   updated_at: string;
   version: number;

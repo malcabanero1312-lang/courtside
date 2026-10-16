@@ -69,6 +69,32 @@ export default async function SettingsPage({
             </div>
           </Card>
 
+          <Card title="Office approval" padded>
+            <div className="stack">
+              <p className="small muted">
+                After a student confirms, the coach or agent sends the booking to the office for approval. Add the office's
+                WhatsApp number to open the chat in one tap; leave it empty to copy the message instead.
+              </p>
+              <div className="form-grid">
+                <label className="field">
+                  <span>Office contact name</span>
+                  <input className="input" name="office_name" defaultValue={org.office_name ?? ""} placeholder="e.g. Club Office or Ms. Reyes" />
+                  <small>Used in the greeting: “Hi …”.</small>
+                </label>
+                <label className="field">
+                  <span>Office WhatsApp number</span>
+                  <input
+                    className="input"
+                    name="office_phone"
+                    defaultValue={org.office_phone ? `+${org.office_phone}` : ""}
+                    placeholder="0917 123 4567"
+                    inputMode="tel"
+                  />
+                </label>
+              </div>
+            </div>
+          </Card>
+
           <Card title="Scheduling" padded>
             <div className="form-grid">
               <label className="field">

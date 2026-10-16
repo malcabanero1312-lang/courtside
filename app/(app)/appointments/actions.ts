@@ -200,7 +200,7 @@ export async function saveAppointment(_prev: AppointmentFormState, formData: For
 const STAFF_STATUSES: AppointmentStatus[] = [
   "scheduled",
   "awaiting_response",
-  "confirmed",
+  "pending_approval",
   "declined",
   "cancelled",
   "completed",
@@ -237,7 +237,7 @@ export async function changeStatus(formData: FormData) {
   revalidatePath("/appointments");
   revalidatePath("/dashboard");
   const messages: Partial<Record<AppointmentStatus, string>> = {
-    confirmed: "Marked as confirmed.",
+    pending_approval: "Recorded that the student confirmed. Next, send the booking to the office for approval.",
     cancelled: "Appointment cancelled. The student's link has been switched off.",
     completed: "Marked as completed.",
     no_show: "Marked as no-show.",
@@ -248,11 +248,24 @@ export async function changeStatus(formData: FormData) {
   back(path, "notice", messages[status] ?? "Status updated.");
 }
 
-export async function logWhatsApp(appointmentId: string, kind: "opened" | "sent", templateKey: string): Promise<{ ok: boolean; error?: string }> {
-  const { supabase } = await requireSession(["admin", "agent"]);
+export async function logWhatsApp(
+  appointmentId: string,
+  kind: "opened" | "sent",
+  templateKey: string,
+  target: "student" | "office" = "student"
+): Promise<{ ok: boolean; error?: string }> {
+  const { supabase } = await requireSession();
+  const eventType =
+    target === "office"
+      ? kind === "opened"
+        ? "office_message_opened"
+        : "office_messaged"
+      : kind === "opened"
+        ? "whatsapp_opened"
+        : "whatsapp_marked_sent";
   const { error } = await supabase.rpc("log_appointment_event", {
     p_appointment: appointmentId,
-    p_event_type: kind === "opened" ? "whatsapp_opened" : "whatsapp_marked_sent",
+    p_event_type: eventType,
     p_details: { template: templateKey }
   });
   if (error) return { ok: false, error: friendlyError(error) };
@@ -262,6 +275,32 @@ export async function logWhatsApp(appointmentId: string, kind: "opened" | "sent"
     revalidatePath("/dashboard");
   }
   return { ok: true };
+}
+
+export async function recordOfficeDecision(formData: FormData) {
+  const { supabase } = await requireSession();
+  const id = text(formData, "id");
+  const decision = text(formData, "decision");
+  const path = `/appointments/${id}`;
+  if (decision !== "approved" && decision !== "not_approved") back(path, "error", "Choose what the office decided.");
+  const { error } = await supabase.rpc("record_office_decision", {
+    p_appointment: id,
+    p_decision: decision,
+    p_note: text(formData, "office_note") || null,
+    p_expected_version: Number(text(formData, "version")) || null
+  });
+  if (error) back(path, "error", friendlyError(error));
+  after(processNotificationsSoon);
+  revalidatePath(path);
+  revalidatePath("/appointments");
+  revalidatePath("/dashboard");
+  back(
+    path,
+    "notice",
+    decision === "approved"
+      ? "Saved: the office approved. Now send the good news to the student below."
+      : "Saved: the office didn't approve. Let the student know below. The time slot is free again."
+  );
 }
 
 export async function logLinkCopied(appointmentId: string): Promise<void> {
@@ -312,19 +351,33 @@ export async function bulkAction(formData: FormData) {
   const returnTo = text(formData, "return_to") || "/appointments";
   const safeReturn = returnTo.startsWith("/appointments") ? returnTo : "/appointments";
   if (ids.length === 0) back(safeReturn, "error", "Select at least one appointment first.");
-  const allowed: Record<string, AppointmentStatus> = { complete: "completed", no_show: "no_show", cancel: "cancelled", confirm: "confirmed" };
+  const allowed: Record<string, AppointmentStatus> = {
+    complete: "completed",
+    no_show: "no_show",
+    cancel: "cancelled",
+    confirm: "pending_approval",
+    office_approved: "confirmed"
+  };
   const status = allowed[action];
   if (!status) back(safeReturn, "error", "Choose what to do with the selected appointments.");
 
   let done = 0;
   const failed: string[] = [];
   for (const id of ids) {
-    const { error } = await supabase.rpc("change_appointment_status", {
-      p_appointment: id,
-      p_status: status,
-      p_reason: status === "cancelled" ? "Cancelled in bulk" : null,
-      p_expected_version: null
-    });
+    const { error } =
+      action === "office_approved"
+        ? await supabase.rpc("record_office_decision", {
+            p_appointment: id,
+            p_decision: "approved",
+            p_note: null,
+            p_expected_version: null
+          })
+        : await supabase.rpc("change_appointment_status", {
+            p_appointment: id,
+            p_status: status,
+            p_reason: status === "cancelled" ? "Cancelled in bulk" : null,
+            p_expected_version: null
+          });
     if (error) failed.push(id);
     else done += 1;
   }

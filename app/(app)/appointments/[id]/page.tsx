@@ -12,7 +12,7 @@ import { Icon } from "@/components/icons";
 import { SubmitButton } from "@/components/buttons";
 import { WhatsAppPanel } from "@/components/whatsapp-panel";
 import { ResponseLinkBox } from "@/components/response-link-box";
-import { changeStatus, regenerateLink, updateAppointmentDetails } from "../actions";
+import { changeStatus, recordOfficeDecision, regenerateLink, updateAppointmentDetails } from "../actions";
 
 export const metadata: Metadata = { title: "Appointment" };
 
@@ -76,9 +76,7 @@ export default async function AppointmentPage({
           .eq("appointment_id", id)
           .order("created_at", { ascending: false })
       : Promise.resolve({ data: [] as never[] }),
-    staff
-      ? supabase.from("message_templates").select("*").eq("org_id", org.id).eq("channel", "whatsapp").order("name")
-      : Promise.resolve({ data: [] as never[] }),
+    supabase.from("message_templates").select("*").eq("org_id", org.id).eq("channel", "whatsapp").order("name"),
     supabase.from("coaches").select("id, full_name").eq("org_id", org.id),
     staff ? supabase.from("session_types").select("*").eq("org_id", org.id).order("name") : Promise.resolve({ data: [] as never[] }),
     staff
@@ -104,12 +102,19 @@ export default async function AppointmentPage({
   const agents = (agentsRes.data ?? []) as { id: string; full_name: string; email: string }[];
   const replacement = nextRes.data as { id: string; reference: string } | null;
 
-  const isOpen = ["scheduled", "awaiting_response", "confirmed", "reschedule_requested", "declined"].includes(appt.status);
+  const isOpen = ["scheduled", "awaiting_response", "pending_approval", "confirmed", "not_approved", "reschedule_requested", "declined"].includes(
+    appt.status
+  );
   const isPast = new Date(appt.ends_at).getTime() < Date.now();
-  const canMessage = staff && isOpen && !isPast;
+  const isOwnCoach = Boolean(appt.coach?.user_id && appt.coach.user_id === user.id);
+  const canAct = staff || isOwnCoach;
+  const isResult = appt.status === "confirmed" || appt.status === "not_approved";
+  const waitingForOffice = appt.status === "pending_approval";
+  const canMessageStudent = !isPast && ((staff && isOpen && !waitingForOffice) || (isOwnCoach && isResult));
+  const canMessageOffice = canAct && waitingForOffice && !isPast;
 
   let token: string | null = null;
-  if (canMessage) {
+  if (staff && canMessageStudent && appt.status !== "not_approved") {
     token = await ensureResponseLink(supabase, {
       orgId: org.id,
       appointmentId: appt.id,
@@ -126,15 +131,27 @@ export default async function AppointmentPage({
     responseLink: link,
     agentName: membership.full_name || null
   });
-  const messages = templates.map((t) => ({ key: t.key, name: t.name, text: renderTemplate(t.body, vars) }));
+  const rendered = templates.map((t) => ({ key: t.key, name: t.name, text: renderTemplate(t.body, vars) }));
+  const officeMessages = rendered.filter((m) => m.key === "office_request");
+  const resultKeys = ["office_approved", "office_not_approved"];
+  const messages = rendered.filter((m) => {
+    if (m.key === "office_request") return false;
+    if (isOwnCoach && !staff) return resultKeys.includes(m.key) || m.key === "reminder";
+    return true;
+  });
+  const needsResultMessage = isResult && !appt.student_informed_at;
   const defaultKey =
-    appt.rescheduled_from_id && appt.status === "scheduled"
-      ? "rescheduled"
-      : appt.status === "awaiting_response"
-        ? "follow_up"
-        : appt.status === "confirmed"
-          ? "reminder"
-          : "appointment_request";
+    appt.status === "not_approved"
+      ? "office_not_approved"
+      : appt.status === "confirmed"
+        ? needsResultMessage
+          ? "office_approved"
+          : "reminder"
+        : appt.rescheduled_from_id && appt.status === "scheduled"
+          ? "rescheduled"
+          : appt.status === "awaiting_response"
+            ? "follow_up"
+            : "appointment_request";
   const resolvedDefault = messages.some((m) => m.key === defaultKey) ? defaultKey : messages[0]?.key ?? "";
 
   const minutes = minutesBetween(appt.starts_at, appt.ends_at);
@@ -193,6 +210,39 @@ export default async function AppointmentPage({
                 </Link>
               </div>
             ) : null}
+          </div>
+        </div>
+      ) : null}
+
+      {waitingForOffice ? (
+        <div className="notice info">
+          <Icon name="clock" size={17} />
+          <div>
+            <strong>The student confirmed. Now the office needs to approve.</strong>{" "}
+            {appt.office_contacted_at
+              ? `Sent to the office ${relativeTime(appt.office_contacted_at)} — waiting for their answer.`
+              : "Send the booking to the office using the message below."}
+            {appt.student_note ? <div style={{ marginTop: 4 }}>Student's note: “{appt.student_note}”</div> : null}
+          </div>
+        </div>
+      ) : null}
+
+      {appt.status === "not_approved" ? (
+        <div className="notice error">
+          <Icon name="x" size={17} />
+          <div>
+            <strong>The office didn't approve this booking.</strong> {appt.office_note ? `Office note: “${appt.office_note}”.` : ""} The time
+            slot is free again.{" "}
+            {appt.student_informed_at ? "The student has been told." : "Let the student know using the message below."}
+          </div>
+        </div>
+      ) : null}
+
+      {appt.status === "confirmed" && appt.office_note ? (
+        <div className="notice success">
+          <Icon name="checkCircle" size={17} />
+          <div>
+            <strong>Approved by the office.</strong> Office note: “{appt.office_note}”
           </div>
         </div>
       ) : null}
@@ -280,14 +330,73 @@ export default async function AppointmentPage({
             ) : null}
           </section>
 
-          {canMessage && messages.length > 0 ? (
+          {canMessageOffice ? (
+            <>
+              {officeMessages.length > 0 ? (
+                <WhatsAppPanel
+                  appointmentId={appt.id}
+                  phone={org.office_phone}
+                  messages={officeMessages}
+                  defaultKey="office_request"
+                  highlight={!appt.office_contacted_at}
+                  studentName={appt.student?.full_name ?? "the student"}
+                  target="office"
+                  title={org.office_name ? `Ask ${org.office_name} to approve` : "Ask the office to approve"}
+                  doneText="Recorded. When the office answers, save their decision below."
+                />
+              ) : (
+                <div className="notice warn">
+                  <Icon name="alert" size={17} />
+                  <div>The message to the office is missing. An admin can add it under Settings → Message templates → Restore missing defaults.</div>
+                </div>
+              )}
+              <Card title="What did the office decide?" padded>
+                <form action={recordOfficeDecision} className="stack">
+                  <input type="hidden" name="id" value={appt.id} />
+                  <input type="hidden" name="version" value={appt.version} />
+                  <label className="field">
+                    <span>Note from the office (optional)</span>
+                    <input
+                      className="input"
+                      name="office_note"
+                      maxLength={300}
+                      placeholder="e.g. Approved, Court 2 reserved — or the reason it can't go ahead"
+                    />
+                    <small>If the office doesn't approve, this note is included in the message to the student.</small>
+                  </label>
+                  <div className="row wrap">
+                    <SubmitButton variant="primary" icon="check" name="decision" value="approved">
+                      Office approved
+                    </SubmitButton>
+                    <SubmitButton
+                      variant="danger"
+                      icon="x"
+                      name="decision"
+                      value="not_approved"
+                      confirmText="Record that the office did NOT approve? The time slot will be freed."
+                    >
+                      Office didn't approve
+                    </SubmitButton>
+                  </div>
+                </form>
+              </Card>
+            </>
+          ) : null}
+
+          {canMessageStudent && messages.length > 0 ? (
             <WhatsAppPanel
               appointmentId={appt.id}
               phone={appt.student?.phone ?? null}
               messages={messages}
               defaultKey={resolvedDefault}
-              highlight={one(sp.send) === "1"}
+              highlight={one(sp.send) === "1" || needsResultMessage}
               studentName={appt.student?.full_name ?? "the student"}
+              title={
+                needsResultMessage
+                  ? `Tell ${appt.student?.full_name?.split(" ")[0] ?? "the student"} the office's answer`
+                  : undefined
+              }
+              doneText={needsResultMessage ? "Recorded. The student has been told the office's answer." : undefined}
             />
           ) : null}
 
@@ -321,8 +430,8 @@ export default async function AppointmentPage({
                 <StatusForm
                   id={appt.id}
                   version={appt.version}
-                  status="confirmed"
-                  label="Mark confirmed (by phone/chat)"
+                  status="pending_approval"
+                  label="Student confirmed (by phone/chat)"
                   variant="primary"
                   icon="check"
                 />
@@ -330,7 +439,7 @@ export default async function AppointmentPage({
               {staff && appt.status === "scheduled" ? (
                 <StatusForm id={appt.id} version={appt.version} status="awaiting_response" label="Mark as contacted" icon="send" />
               ) : null}
-              {isPast && ["scheduled", "awaiting_response", "confirmed"].includes(appt.status) ? (
+              {isPast && ["scheduled", "awaiting_response", "pending_approval", "confirmed"].includes(appt.status) ? (
                 <>
                   <StatusForm id={appt.id} version={appt.version} status="completed" label="Mark completed" variant="primary" icon="check" />
                   <StatusForm id={appt.id} version={appt.version} status="no_show" label="Mark no-show" icon="ban" />
@@ -370,7 +479,9 @@ export default async function AppointmentPage({
                   </div>
                 </details>
               ) : null}
-              {!staff && !isPast ? <p className="small muted">Coaches can mark sessions completed or no-show once they've finished.</p> : null}
+              {!staff && !isPast ? (
+                <p className="small muted">Coaches can record the office's decision, message the student the result, and mark attendance after the session.</p>
+              ) : null}
             </div>
           </Card>
 

@@ -47,7 +47,7 @@ export default async function StudentsPage({
         .select("student_id, starts_at")
         .in("student_id", students.map((s) => s.id))
         .gte("starts_at", new Date().toISOString())
-        .in("status", ["scheduled", "awaiting_response", "confirmed", "reschedule_requested"])
+        .in("status", ["scheduled", "awaiting_response", "pending_approval", "confirmed", "reschedule_requested"])
         .order("starts_at")
     : { data: [] };
   const nextByStudent = new Map<string, string>();
