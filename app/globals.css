@@ -1333,6 +1333,42 @@ details.disclosure > summary::-webkit-details-marker {
   border: 1px solid var(--line);
 }
 
+html.standalone-app,
+html.standalone-app body {
+  overscroll-behavior-y: contain;
+}
+
+.ptr {
+  position: fixed;
+  top: 0;
+  left: 50%;
+  z-index: 100;
+  pointer-events: none;
+  transition: opacity 0.1s;
+}
+
+.ptr-circle {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--surface);
+  color: var(--court-2);
+  display: grid;
+  place-items: center;
+  box-shadow: var(--shadow-lg);
+  border: 1px solid var(--line);
+}
+
+.ptr-circle.spinning {
+  animation: ptr-spin 0.8s linear infinite;
+}
+
+@keyframes ptr-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .break-list {
   margin-top: 10px;
   padding-left: 140px;
