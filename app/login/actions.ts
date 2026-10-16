@@ -34,6 +34,7 @@ export async function signIn(_prev: AuthState, formData: FormData): Promise<Auth
     }
     return { error: "That email and password don't match. Try again or reset your password." };
   }
+  await supabase.rpc("accept_invitations");
   redirect(safeNext(formData.get("next")));
 }
 

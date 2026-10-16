@@ -9,7 +9,9 @@ import { Card, EmptyState, Flash, PageHeader, StatusBadge } from "@/components/u
 import { Icon } from "@/components/icons";
 import { SubmitButton } from "@/components/buttons";
 import { CoachFields } from "../coach-fields";
-import { addTimeOff, deleteBlockedTime, inviteCoach, saveAvailability, updateCoach } from "../actions";
+import { addTimeOff, deleteBlockedTime, saveAvailability, updateCoach } from "../actions";
+import { InviteForm } from "@/components/invite-form";
+import { appUrl } from "@/lib/env";
 
 export const metadata: Metadata = { title: "Coach" };
 
@@ -225,19 +227,15 @@ export default async function CoachPage({
             <Card title="Coach login" padded>
               {coach.user_id ? (
                 <p className="small muted">This coach can log in to see their schedule and manage their hours.</p>
-              ) : invite ? (
-                <p className="small muted">
-                  Invitation waiting for <strong>{invite.email}</strong>. They just need to sign up with that email.
-                </p>
               ) : (
-                <form action={inviteCoach} className="stack tight">
-                  <input type="hidden" name="coach_id" value={coach.id} />
-                  <p className="small muted">Let this coach log in to see their sessions, mark attendance and set their hours.</p>
-                  <SubmitButton size="small" icon="send" disabled={!coach.email}>
-                    Invite to log in
-                  </SubmitButton>
-                  {!coach.email ? <span className="small faint">Add an email address first.</span> : null}
-                </form>
+                <div className="stack">
+                  {invite ? (
+                    <p className="small muted">
+                      An invitation is waiting for <strong>{invite.email}</strong>. You can also create their login now.
+                    </p>
+                  ) : null}
+                  <InviteForm appUrl={appUrl()} orgName={org.name} coachId={coach.id} coachEmail={coach.email} />
+                </div>
               )}
             </Card>
           ) : null}

@@ -4,15 +4,12 @@ import type { Membership } from "@/lib/types";
 import { formatDate, initials } from "@/lib/format";
 import { Card, Flash, PageHeader } from "@/components/ui";
 import { SubmitButton } from "@/components/buttons";
-import { changeRole, inviteMember, removeMember, revokeInvitation, updateMyProfile } from "./actions";
+import { changeRole, removeMember, revokeInvitation, updateMyProfile } from "./actions";
+import { InviteForm } from "@/components/invite-form";
+import { appUrl } from "@/lib/env";
 
 export const metadata: Metadata = { title: "Team" };
 
-const ROLE_HELP: Record<string, string> = {
-  admin: "Everything, including settings, team and templates",
-  agent: "Books and manages appointments, students and messages",
-  coach: "Sees their own sessions, marks attendance, sets their hours"
-};
 
 export default async function TeamPage({
   searchParams
@@ -93,32 +90,7 @@ export default async function TeamPage({
 
         <aside className="stack">
           <Card title="Invite someone" padded>
-            <form action={inviteMember} className="stack">
-              <label className="field">
-                <span>Name</span>
-                <input className="input" name="full_name" placeholder="Paolo Cruz" />
-              </label>
-              <label className="field">
-                <span>Email</span>
-                <input className="input" type="email" name="email" required placeholder="paolo@club.com" />
-              </label>
-              <div className="stack tight">
-                <span className="label">Role</span>
-                {(["agent", "coach", "admin"] as const).map((role) => (
-                  <label key={role} className="choice" style={{ padding: "10px 12px" }}>
-                    <input type="radio" name="role" value={role} defaultChecked={role === "agent"} />
-                    <div>
-                      <div style={{ fontWeight: 600, textTransform: "capitalize" }}>{role}</div>
-                      <div className="small muted">{ROLE_HELP[role]}</div>
-                    </div>
-                  </label>
-                ))}
-              </div>
-              <SubmitButton variant="primary" icon="send">Create invitation</SubmitButton>
-              <p className="small muted">
-                For coaches, it's best to invite from the coach's own page so their login is linked to their schedule.
-              </p>
-            </form>
+            <InviteForm appUrl={appUrl()} orgName={org.name} />
           </Card>
           <Card title="Your name" padded>
             <form action={updateMyProfile} className="stack">
