@@ -3,7 +3,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { requireSession } from "@/lib/session";
 import type { Coach } from "@/lib/types";
-import { Card, EmptyState, Flash, PageHeader } from "@/components/ui";
+import { Card, EmptyState, Flash, Fold, PageHeader } from "@/components/ui";
 import { Icon } from "@/components/icons";
 import { SubmitButton } from "@/components/buttons";
 import { initials } from "@/lib/format";
@@ -69,12 +69,12 @@ export default async function CoachesPage({
           )}
         </Card>
         {membership.role === "admin" ? (
-          <Card title="Add a coach" padded>
+          <Fold title="Add a coach" padded open={coaches.length === 0}>
             <form action={createCoach} className="stack">
               <CoachFields />
               <SubmitButton variant="primary" icon="plus">Add coach</SubmitButton>
             </form>
-          </Card>
+          </Fold>
         ) : null}
       </div>
     </>

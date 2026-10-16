@@ -6,6 +6,7 @@ import { formatTime, STATUS_META } from "@/lib/format";
 import { addDays, isValidDateInput, startOfWeek, todayInZone, utcToZonedInputs, zonedToUtc } from "@/lib/time";
 import { PageHeader, one } from "@/components/ui";
 import { Icon } from "@/components/icons";
+import { ScrollToToday } from "@/components/scroll-to-today";
 
 export const metadata: Metadata = { title: "Calendar" };
 
@@ -75,6 +76,29 @@ export default async function CalendarPage({
         subtitle={`Week of ${new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", timeZone: "UTC" }).format(new Date(`${weekStart}T12:00:00Z`))} · ${appointments.length} session${appointments.length === 1 ? "" : "s"}`}
         actions={
           <>
+            <details className="disclosure picker">
+              <summary className="btn small">
+                <Icon name="download" size={15} /> Spreadsheet
+              </summary>
+              <div className="picker-menu" style={{ left: "auto", right: 0, width: 220 }}>
+                {[1, 4].map((n) => (
+                  <a
+                    key={n}
+                    className="picker-option"
+                    href={`/api/calendar/export?${new URLSearchParams({
+                      week: weekStart,
+                      weeks: String(n),
+                      ...(coachFilter ? { coach: coachFilter } : {}),
+                      ...(venueFilter ? { venue: venueFilter } : {}),
+                      ...(showCancelled ? { cancelled: "1" } : {})
+                    }).toString()}`}
+                  >
+                    <Icon name="download" size={15} />
+                    {n === 1 ? "This week" : "Next 4 weeks"}
+                  </a>
+                ))}
+              </div>
+            </details>
             <Link className="btn small" href={link({ week: addDays(weekStart, -7) })} aria-label="Previous week">
               <Icon name="chevronLeft" size={16} />
             </Link>
@@ -136,53 +160,59 @@ export default async function CalendarPage({
           </div>
         </form>
 
-        <div className="week">
-          {days.map((day, index) => {
-            const items = byDay.get(day) ?? [];
-            const dayNumber = Number(day.slice(8, 10));
-            return (
-              <div key={day} className={`week-day ${day === today ? "today" : ""}`}>
-                <div className="week-day-head">
-                  <strong>{dayNumber}</strong>
-                  <span className="small muted">{DAY_NAMES[index]}</span>
-                  {staff && day >= today ? (
-                    <Link href={`/appointments/new?date=${day}${coachFilter ? `&coach=${coachFilter}` : ""}`} className="btn ghost small" style={{ marginLeft: "auto", height: 24, padding: "0 6px" }} title="Book on this day">
-                      <Icon name="plus" size={14} />
-                    </Link>
-                  ) : null}
+        <ScrollToToday />
+        <div className="week-scroll">
+          <div className="week">
+            {days.map((day, index) => {
+              const items = byDay.get(day) ?? [];
+              const dayNumber = Number(day.slice(8, 10));
+              return (
+                <div key={day} className={`week-day ${day === today ? "today" : ""}`} data-today={day === today ? "1" : undefined}>
+                  <div className="week-day-head">
+                    <strong>{dayNumber}</strong>
+                    <span className="small muted">
+                      {DAY_NAMES[index]} · {new Intl.DateTimeFormat("en-GB", { month: "short", timeZone: "UTC" }).format(new Date(`${day}T12:00:00Z`))}
+                    </span>
+                    {items.length ? <span className="badge plain tone-slate" style={{ height: 20, fontSize: 11 }}>{items.length}</span> : null}
+                    {staff && day >= today ? (
+                      <Link href={`/appointments/new?date=${day}${coachFilter ? `&coach=${coachFilter}` : ""}`} className="btn ghost small" style={{ marginLeft: "auto", height: 24, padding: "0 6px" }} title="Book on this day">
+                        <Icon name="plus" size={14} />
+                      </Link>
+                    ) : null}
+                  </div>
+                  {items.length === 0 ? <span className="small faint" style={{ padding: "0 4px" }}>—</span> : null}
+                  {items.map((a) => {
+                    const dim = a.status === "cancelled" || a.status === "declined" || a.status === "not_approved";
+                    return (
+                      <Link
+                        key={a.id}
+                        href={`/appointments/${a.id}`}
+                        className={`cal-item ${dim ? "dim" : ""}`}
+                        style={{ borderLeftColor: a.coach?.color ?? "var(--court-2)" }}
+                        title={STATUS_META[a.status].label}
+                      >
+                        <div className="mono" style={{ fontWeight: 650 }}>
+                          {formatTime(a.starts_at, tz)}–{formatTime(a.ends_at, tz)}
+                        </div>
+                        <div className="cal-student">
+                          {a.student?.full_name}
+                        </div>
+                        <div className="muted">
+                          {a.coach?.full_name}
+                          {a.court ? ` · ${a.court.name}` : ""}
+                        </div>
+                        <div style={{ marginTop: 4 }}>
+                          <span className={`badge tone-${STATUS_META[a.status].tone}`} style={{ height: 18, fontSize: 10.5, padding: "0 6px" }}>
+                            {STATUS_META[a.status].label}
+                          </span>
+                        </div>
+                      </Link>
+                    );
+                  })}
                 </div>
-                {items.length === 0 ? <span className="small faint" style={{ padding: "0 4px" }}>—</span> : null}
-                {items.map((a) => {
-                  const dim = a.status === "cancelled" || a.status === "declined" || a.status === "not_approved";
-                  return (
-                    <Link
-                      key={a.id}
-                      href={`/appointments/${a.id}`}
-                      className={`cal-item ${dim ? "dim" : ""}`}
-                      style={{ borderLeftColor: a.coach?.color ?? "var(--court-2)" }}
-                      title={STATUS_META[a.status].label}
-                    >
-                      <div className="mono" style={{ fontWeight: 650 }}>
-                        {formatTime(a.starts_at, tz)}–{formatTime(a.ends_at, tz)}
-                      </div>
-                      <div className="truncate" style={{ fontWeight: 600 }}>
-                        {a.student?.full_name}
-                      </div>
-                      <div className="truncate muted">
-                        {a.coach?.full_name}
-                        {a.court ? ` · ${a.court.name}` : ""}
-                      </div>
-                      <div style={{ marginTop: 4 }}>
-                        <span className={`badge tone-${STATUS_META[a.status].tone}`} style={{ height: 18, fontSize: 10.5, padding: "0 6px" }}>
-                          {STATUS_META[a.status].label}
-                        </span>
-                      </div>
-                    </Link>
-                  );
-                })}
-              </div>
-            );
-          })}
+              );
+            })}
+          </div>
         </div>
       </section>
     </>

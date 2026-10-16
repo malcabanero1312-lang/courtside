@@ -2,9 +2,9 @@ import type { Metadata } from "next";
 import { requireSession } from "@/lib/session";
 import type { Membership } from "@/lib/types";
 import { formatDate, initials } from "@/lib/format";
-import { Card, Flash, PageHeader } from "@/components/ui";
+import { Card, Flash, Fold, PageHeader } from "@/components/ui";
 import { SubmitButton } from "@/components/buttons";
-import { changeRole, removeMember, revokeInvitation, updateMyProfile } from "./actions";
+import { changeRole, removeMember, revokeInvitation } from "./actions";
 import { InviteForm } from "@/components/invite-form";
 import { appUrl } from "@/lib/env";
 
@@ -89,15 +89,9 @@ export default async function TeamPage({
         </div>
 
         <aside className="stack">
-          <Card title="Invite someone" padded>
+          <Fold title="Invite someone" padded open={members.length <= 1}>
             <InviteForm appUrl={appUrl()} orgName={org.name} />
-          </Card>
-          <Card title="Your name" padded>
-            <form action={updateMyProfile} className="stack">
-              <input className="input" name="full_name" defaultValue={membership.full_name} placeholder="Shown in WhatsApp messages" />
-              <SubmitButton size="small">Save</SubmitButton>
-            </form>
-          </Card>
+          </Fold>
         </aside>
       </div>
     </>

@@ -3,7 +3,7 @@ import Link from "next/link";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { requireSession, ORG_COOKIE } from "@/lib/session";
-import { NavLink } from "@/components/nav-link";
+import { MobileTab, NavLink } from "@/components/nav-link";
 import { Icon, type IconName } from "@/components/icons";
 import { initials } from "@/lib/format";
 import type { Role } from "@/lib/types";
@@ -17,14 +17,14 @@ interface NavItem {
 }
 
 const NAV: NavItem[] = [
-  { href: "/dashboard", label: "Dashboard", icon: "dashboard", roles: ["admin", "agent", "coach"], section: "work" },
-  { href: "/appointments", label: "Appointments", icon: "list", roles: ["admin", "agent", "coach"], section: "work" },
+  { href: "/dashboard", label: "Today", icon: "dashboard", roles: ["admin", "agent", "coach"], section: "work" },
   { href: "/calendar", label: "Calendar", icon: "calendar", roles: ["admin", "agent", "coach"], section: "work" },
+  { href: "/appointments", label: "Appointments", icon: "list", roles: ["admin", "agent", "coach"], section: "work" },
   { href: "/students", label: "Students", icon: "users", roles: ["admin", "agent"], section: "work" },
-  { href: "/notifications", label: "Emails", icon: "mail", roles: ["admin", "agent"], section: "work" },
-  { href: "/reports", label: "Reports", icon: "chart", roles: ["admin", "agent"], section: "work" },
   { href: "/coaches", label: "Coaches", icon: "whistle", roles: ["admin", "agent", "coach"], section: "manage" },
   { href: "/venues", label: "Venues & courts", icon: "court", roles: ["admin", "agent"], section: "manage" },
+  { href: "/reports", label: "Reports", icon: "chart", roles: ["admin", "agent"], section: "manage" },
+  { href: "/notifications", label: "Emails", icon: "mail", roles: ["admin", "agent"], section: "manage" },
   { href: "/team", label: "Team", icon: "shield", roles: ["admin"], section: "manage" },
   { href: "/settings", label: "Settings", icon: "settings", roles: ["admin"], section: "manage" }
 ];
@@ -127,27 +127,31 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
 
       <div style={{ minWidth: 0 }}>
         <div className="mobile-top">
-          <div className="row between" style={{ paddingRight: 12 }}>
-            <div className="brand">
-              <div className="brand-mark" style={{ width: 28, height: 28 }}>
-                <Icon name="ball" size={16} />
-              </div>
-              <div className="brand-name" style={{ fontSize: 17 }}>{org.name}</div>
+          <div className="brand">
+            <div className="brand-mark" style={{ width: 28, height: 28 }}>
+              <Icon name="ball" size={16} />
             </div>
-            <form action="/auth/signout" method="post">
-              <button className="btn ghost small" type="submit" style={{ color: "#c9dad1" }}>
-                <Icon name="logout" size={16} />
-              </button>
-            </form>
+            <div className="brand-name truncate" style={{ fontSize: 17 }}>
+              {org.name}
+            </div>
           </div>
-          <nav className="mobile-nav" aria-label="Main">
-            {items.map((item) => (
-              <NavLink key={item.href} href={item.href} icon={item.icon} label={item.label} />
-            ))}
-          </nav>
         </div>
         <main className="main">{children}</main>
       </div>
+
+      <nav className="bottom-nav" aria-label="Main">
+        <MobileTab href="/dashboard" icon="dashboard" label="Today" count={attention} />
+        <MobileTab href="/calendar" icon="calendar" label="Calendar" />
+        {role !== "coach" ? (
+          <Link href="/appointments/new" className="bottom-nav-book" aria-label="Book a session">
+            <Icon name="plus" size={24} />
+          </Link>
+        ) : (
+          <MobileTab href="/appointments" icon="list" label="Sessions" />
+        )}
+        {role !== "coach" ? <MobileTab href="/students" icon="users" label="Students" /> : <MobileTab href="/coaches" icon="clock" label="My hours" />}
+        <MobileTab href="/more" icon="columns" label="More" />
+      </nav>
     </div>
   );
 }

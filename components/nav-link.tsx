@@ -15,3 +15,17 @@ export function NavLink({ href, icon, label, count }: { href: string; icon: Icon
     </Link>
   );
 }
+
+export function MobileTab({ href, icon, label, count }: { href: string; icon: IconName; label: string; count?: number }) {
+  const pathname = usePathname();
+  const active = pathname === href || pathname.startsWith(href + "/");
+  return (
+    <Link href={href} className={`bottom-tab ${active ? "active" : ""}`} aria-current={active ? "page" : undefined}>
+      <span className="bottom-tab-icon">
+        <Icon name={icon} size={21} />
+        {count ? <span className="bottom-tab-count">{count > 9 ? "9+" : count}</span> : null}
+      </span>
+      <span>{label}</span>
+    </Link>
+  );
+}

@@ -24,10 +24,17 @@ function insideScrolledArea(target: EventTarget | null): boolean {
   return false;
 }
 
+let clearTimer: number | undefined;
+
 function setOffset(px: number, animate: boolean) {
   const root = document.documentElement;
+  window.clearTimeout(clearTimer);
   root.style.setProperty("--ptr-offset", `${px}px`);
   root.classList.toggle("ptr-animating", animate);
+  root.classList.add("ptr-active");
+  if (px === 0) {
+    clearTimer = window.setTimeout(() => root.classList.remove("ptr-active", "ptr-animating"), animate ? 260 : 0);
+  }
 }
 
 export function PullToRefresh() {

@@ -154,3 +154,30 @@ export function CoachDot({ color }: { color?: string | null }) {
 export function one(param: string | string[] | undefined): string {
   return Array.isArray(param) ? param[0] ?? "" : param ?? "";
 }
+
+export function Fold({
+  title,
+  children,
+  open = false,
+  padded = false,
+  hint
+}: {
+  title: ReactNode;
+  children: ReactNode;
+  open?: boolean;
+  padded?: boolean;
+  hint?: ReactNode;
+}) {
+  return (
+    <details className="card fold" open={open}>
+      <summary className="card-head">
+        <span className="card-title">{title}</span>
+        <span className="row" style={{ gap: 8 }}>
+          {hint ? <span className="small muted">{hint}</span> : null}
+          <Icon name="chevronRight" size={16} className="fold-chevron" />
+        </span>
+      </summary>
+      {padded ? <div className="card-body">{children}</div> : children}
+    </details>
+  );
+}

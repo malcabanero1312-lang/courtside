@@ -3,7 +3,7 @@ import { requireSession } from "@/lib/session";
 import type { Court, Venue } from "@/lib/types";
 import { formatDateTime } from "@/lib/format";
 import { addDays, todayInZone } from "@/lib/time";
-import { Card, EmptyState, Flash, PageHeader } from "@/components/ui";
+import { Card, EmptyState, Flash, Fold, PageHeader } from "@/components/ui";
 import { SubmitButton } from "@/components/buttons";
 import { addClosure, addCourt, createVenue, toggleCourt, updateVenue } from "./actions";
 import { deleteBlockedTime } from "../coaches/actions";
@@ -165,7 +165,7 @@ export default async function VenuesPage({
 
         <aside className="stack">
           {isAdmin ? (
-            <Card title="Add a venue" padded>
+            <Fold title="Add a venue" padded open={venues.length === 0}>
               <form action={createVenue} className="stack">
                 <VenueFields />
                 <label className="field">
@@ -175,10 +175,10 @@ export default async function VenuesPage({
                 </label>
                 <SubmitButton variant="primary" icon="plus">Add venue</SubmitButton>
               </form>
-            </Card>
+            </Fold>
           ) : null}
           {venues.length > 0 ? (
-            <Card title="Close a venue or court" padded>
+            <Fold title="Close a venue or court" padded>
               <form action={addClosure} className="stack">
                 <label className="field">
                   <span>What's closed</span>
@@ -218,7 +218,7 @@ export default async function VenuesPage({
                 <input className="input" name="reason" placeholder="Reason, e.g. Resurfacing, tournament" maxLength={200} />
                 <SubmitButton icon="ban">Add closure</SubmitButton>
               </form>
-            </Card>
+            </Fold>
           ) : null}
         </aside>
       </div>

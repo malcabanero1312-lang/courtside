@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { requireSession, isStaff } from "@/lib/session";
 import { APPOINTMENT_SELECT, type AppointmentWithRelations } from "@/lib/types";
-import { formatDate, formatTime, firstName, relativeTime } from "@/lib/format";
+import { formatDate, formatTime, firstName } from "@/lib/format";
 import { dayRangeUtc, todayInZone } from "@/lib/time";
 import { isEmailConfigured } from "@/lib/env";
 import { ButtonLink, Card, CoachDot, EmptyState, Flash, Notice, PageHeader, StatusBadge } from "@/components/ui";
@@ -66,7 +66,6 @@ export default async function DashboardPage({
   const tz = org.timezone;
   const today = todayInZone(tz);
   const range = dayRangeUtc(today, tz);
-  const now = new Date().toISOString();
 
   const [summaryRes, todayRes, attentionRes, setupRes] = await Promise.all([
     supabase.rpc("dashboard_summary", { p_org: org.id }),
@@ -79,21 +78,7 @@ export default async function DashboardPage({
       .not("status", "in", "(rescheduled,cancelled,declined,not_approved)")
       .order("starts_at"),
     staff
-      ? supabase
-          .from("appointments")
-          .select(APPOINTMENT_SELECT)
-          .eq("org_id", org.id)
-          .or(
-            [
-              "status.eq.reschedule_requested",
-              `and(status.eq.pending_approval,starts_at.gte."${now}")`,
-              `and(status.in.(confirmed,not_approved),student_informed_at.is.null,starts_at.gte."${now}")`,
-              `and(status.eq.scheduled,starts_at.gte."${now}")`,
-              `and(status.eq.awaiting_response,starts_at.gte."${now}")`
-            ].join(",")
-          )
-          .order("starts_at")
-          .limit(12)
+      ? Promise.resolve({ data: [] as never[] })
       : supabase
           .from("appointments")
           .select(APPOINTMENT_SELECT)
@@ -101,7 +86,7 @@ export default async function DashboardPage({
           .gte("starts_at", range.end)
           .not("status", "in", "(rescheduled,cancelled,declined,not_approved)")
           .order("starts_at")
-          .limit(10),
+          .limit(8),
     staff
       ? Promise.all([
           supabase.from("venues").select("id", { count: "exact", head: true }).eq("org_id", org.id),
@@ -120,6 +105,23 @@ export default async function DashboardPage({
   }
   const todays = (todayRes.data ?? []) as unknown as AppointmentWithRelations[];
   const attention = (attentionRes.data ?? []) as unknown as AppointmentWithRelations[];
+
+  const todo = [
+    { count: summary.reschedule_requests ?? 0, label: "Asked for a new time", hint: "Pick a new time and send it", href: "/appointments?view=reschedule", urgent: true },
+    { count: summary.office_not_sent ?? 0, label: "Send to the office", hint: "Student confirmed — ask the office to approve", href: "/appointments?view=office", urgent: true },
+    { count: summary.results_to_send ?? 0, label: "Tell the student", hint: "The office decided — send the result", href: "/appointments?view=tell_student", urgent: true },
+    { count: summary.to_contact ?? 0, label: "Message the student", hint: "Booked but not messaged yet", href: "/appointments?view=to_contact", urgent: false },
+    { count: summary.awaiting_overdue ?? 0, label: "Follow up", hint: "No reply for a while", href: "/appointments?view=awaiting", urgent: false },
+    {
+      count: Math.max(0, (summary.office_pending ?? 0) - (summary.office_not_sent ?? 0)),
+      label: "Waiting for the office",
+      hint: "Sent — waiting for their answer",
+      href: "/appointments?view=office",
+      urgent: false
+    },
+    { count: summary.to_close ?? 0, label: "Close past sessions", hint: "Mark completed or no-show", href: "/appointments?view=to_close", urgent: false },
+    { count: summary.failed_notifications ?? 0, label: "Emails that failed", hint: "Open the email log to retry", href: "/notifications?status=failed", urgent: false }
+  ].filter((item) => item.count > 0);
 
   const setup = setupRes
     ? {
@@ -187,75 +189,40 @@ export default async function DashboardPage({
         </Card>
       ) : null}
 
-      {staff && !isEmailConfigured() ? (
-        <Notice tone="info">
-          Email updates are not switched on yet, so confirmations and reminders are recorded but not emailed. WhatsApp messages
-          and the student response page work normally. See <strong>SETUP.md → Email</strong> to turn emails on.
-        </Notice>
-      ) : null}
       {workerStale ? (
         <Notice tone="warn">
-          The scheduled email job hasn't run in the last day, so reminders and retries may be delayed. Check the cron setup in
-          SETUP.md, or press “Send now” on the <Link className="link" href="/notifications">Emails</Link> page.
+          The scheduled email job hasn't run in the last day, so reminders and retries may be delayed. Press “Send now” on the{" "}
+          <Link className="link" href="/notifications">
+            Emails
+          </Link>{" "}
+          page.
         </Notice>
       ) : null}
 
-      <div className="kpis" style={{ marginTop: setupIncomplete ? 18 : 0 }}>
-        <Link href="/calendar" className="card kpi accent">
-          <span className="kpi-label">Sessions today</span>
-          <span className="kpi-value">{staff ? summary.today ?? todays.length : todays.length}</span>
-        </Link>
+      <div className="grid two" style={{ marginTop: setupIncomplete ? 18 : 0 }}>
         {staff ? (
-          <>
-            <Link href="/appointments?view=to_contact" className="card kpi">
-              <span className="kpi-label">To contact</span>
-              <span className="kpi-value">{summary.to_contact ?? 0}</span>
-            </Link>
-            <Link href="/appointments?view=awaiting" className="card kpi">
-              <span className="kpi-label">Awaiting reply</span>
-              <span className="kpi-value">{summary.awaiting ?? 0}</span>
-              {summary.awaiting_overdue ? <span className="kpi-note">{summary.awaiting_overdue} need a follow-up</span> : null}
-            </Link>
-            <Link href="/appointments?view=office" className="card kpi">
-              <span className="kpi-label">Waiting for office</span>
-              <span className="kpi-value">{summary.office_pending ?? 0}</span>
-              {summary.office_not_sent ? <span className="kpi-note">{summary.office_not_sent} not sent to the office yet</span> : null}
-            </Link>
-            <Link href="/appointments?view=tell_student" className="card kpi">
-              <span className="kpi-label">Tell student the result</span>
-              <span className="kpi-value">{summary.results_to_send ?? 0}</span>
-            </Link>
-            <Link href="/appointments?view=reschedule" className="card kpi">
-              <span className="kpi-label">New time requested</span>
-              <span className="kpi-value">{summary.reschedule_requests ?? 0}</span>
-            </Link>
-          </>
+          <Card title="To do" actions={<span className="small muted">{summary.confirmed_week ?? 0} confirmed this week</span>}>
+            {todo.length === 0 ? (
+              <EmptyState icon="checkCircle" title="All caught up" body="Nothing needs your attention right now." />
+            ) : (
+              <div className="list">
+                {todo.map((item) => (
+                  <Link key={item.href} href={item.href} className="list-item todo-item">
+                    <span className={`todo-count ${item.urgent ? "urgent" : ""}`}>{item.count}</span>
+                    <div className="grow">
+                      <div style={{ fontWeight: 600 }}>{item.label}</div>
+                      <div className="small muted">{item.hint}</div>
+                    </div>
+                    <Icon name="chevronRight" size={16} />
+                  </Link>
+                ))}
+              </div>
+            )}
+          </Card>
         ) : null}
-        {staff ? (
-          <Link href="/appointments?view=confirmed" className="card kpi">
-            <span className="kpi-label">Confirmed, next 7 days</span>
-            <span className="kpi-value">{summary.confirmed_week ?? 0}</span>
-          </Link>
-        ) : null}
-        {staff && summary.to_close ? (
-          <Link href="/appointments?view=to_close" className="card kpi">
-            <span className="kpi-label">Past sessions to close</span>
-            <span className="kpi-value">{summary.to_close}</span>
-          </Link>
-        ) : null}
-        {staff && summary.failed_notifications ? (
-          <Link href="/notifications?status=failed" className="card kpi">
-            <span className="kpi-label">Emails that failed</span>
-            <span className="kpi-value" style={{ color: "var(--red)" }}>
-              {summary.failed_notifications}
-            </span>
-          </Link>
-        ) : null}
-      </div>
 
-      <div className="grid two">
         <Card
-          title="Today's schedule"
+          title={`Today · ${todays.length} session${todays.length === 1 ? "" : "s"}`}
           actions={
             <Link href="/calendar" className="small link">
               Week view
@@ -263,7 +230,7 @@ export default async function DashboardPage({
           }
         >
           {todays.length === 0 ? (
-            <EmptyState icon="calendar" title="No sessions today" body="Enjoy the quiet — or book someone in." />
+            <EmptyState icon="calendar" title="No sessions today" />
           ) : (
             <div className="list">
               {todays.map((a) => (
@@ -273,35 +240,26 @@ export default async function DashboardPage({
           )}
         </Card>
 
-        <Card
-          title={staff ? "Needs attention" : "Coming up"}
-          actions={
-            <Link href={staff ? "/appointments?view=to_contact" : "/appointments"} className="small link">
-              See all
-            </Link>
-          }
-        >
-          {attention.length === 0 ? (
-            <EmptyState
-              icon="checkCircle"
-              title={staff ? "All caught up" : "Nothing scheduled"}
-              body={staff ? "Every upcoming student has been contacted and nobody is waiting on you." : "New sessions will show up here."}
-            />
-          ) : (
-            <div className="list">
-              {attention.map((a) => (
-                <div key={a.id} style={{ position: "relative" }}>
-                  <AppointmentRow a={a} tz={tz} showDate />
-                  {staff && a.status === "awaiting_response" && a.contacted_at ? (
-                    <div className="small muted" style={{ padding: "0 20px 10px 108px", marginTop: -8 }}>
-                      Messaged {relativeTime(a.contacted_at)}
-                    </div>
-                  ) : null}
-                </div>
-              ))}
-            </div>
-          )}
-        </Card>
+        {!staff ? (
+          <Card
+            title="Coming up"
+            actions={
+              <Link href="/calendar" className="small link">
+                See all
+              </Link>
+            }
+          >
+            {attention.length === 0 ? (
+              <EmptyState icon="calendar" title="Nothing scheduled" />
+            ) : (
+              <div className="list">
+                {attention.map((a) => (
+                  <AppointmentRow key={a.id} a={a} tz={tz} showDate />
+                ))}
+              </div>
+            )}
+          </Card>
+        ) : null}
       </div>
     </>
   );

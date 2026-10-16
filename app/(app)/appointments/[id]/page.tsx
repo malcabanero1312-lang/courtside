@@ -7,7 +7,7 @@ import { durationLabel, formatDate, formatDateTime, formatTimeRange, minutesBetw
 import { ensureResponseLink, responseUrl } from "@/lib/links";
 import { buildTemplateVars, renderTemplate } from "@/lib/templates";
 import { describeEvent, type AppointmentEvent } from "@/lib/events";
-import { Card, CoachDot, Flash, PageHeader, StatusBadge, one } from "@/components/ui";
+import { Card, CoachDot, Flash, Fold, PageHeader, StatusBadge, one } from "@/components/ui";
 import { Icon } from "@/components/icons";
 import { SubmitButton } from "@/components/buttons";
 import { WhatsAppPanel } from "@/components/whatsapp-panel";
@@ -398,28 +398,6 @@ export default async function AppointmentPage({
               doneText={needsResultMessage ? "Recorded. The student has been told the office's answer." : undefined}
             />
           ) : null}
-
-          <Card title="History">
-            {events.length === 0 ? (
-              <div className="card-body muted">No activity yet.</div>
-            ) : (
-              <ul className="timeline">
-                {events.map((event) => {
-                  const described = describeEvent(event, tz, coachNames);
-                  return (
-                    <li key={event.id}>
-                      <span className={`timeline-dot ${event.actor_type}`} />
-                      <div>
-                        <div style={{ fontWeight: 600 }}>{described.title}</div>
-                        {described.detail ? <div className="small" style={{ color: "var(--ink-2)" }}>{described.detail}</div> : null}
-                        <div className="small faint">{formatDateTime(event.created_at, tz)}</div>
-                      </div>
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
-          </Card>
         </div>
 
         <aside className="stack">
@@ -485,7 +463,7 @@ export default async function AppointmentPage({
           </Card>
 
           {staff && link ? (
-            <Card title="Student response link" padded>
+            <Fold title="Student response link" padded>
               <ResponseLinkBox appointmentId={appt.id} link={link} />
               <form action={regenerateLink} style={{ marginTop: 10 }}>
                 <input type="hidden" name="id" value={appt.id} />
@@ -498,10 +476,10 @@ export default async function AppointmentPage({
                   Replace link
                 </SubmitButton>
               </form>
-            </Card>
+            </Fold>
           ) : null}
 
-          <Card title="Details" padded>
+          <Fold title="Notes & details" padded>
             <form action={updateAppointmentDetails} className="stack">
               <input type="hidden" name="id" value={appt.id} />
               {staff ? (
@@ -536,16 +514,12 @@ export default async function AppointmentPage({
               </label>
               <SubmitButton size="small">Save details</SubmitButton>
             </form>
-          </Card>
+          </Fold>
 
           {staff ? (
-            <Card
+            <Fold
               title="Email updates"
-              actions={
-                <Link href="/notifications" className="small link">
-                  All emails
-                </Link>
-              }
+              hint={notifications.length ? String(notifications.length) : undefined}
             >
               {notifications.length === 0 ? (
                 <div className="card-body small muted">No emails for this appointment yet.</div>
@@ -572,8 +546,29 @@ export default async function AppointmentPage({
                   ))}
                 </div>
               )}
-            </Card>
+            </Fold>
           ) : null}
+          <Fold title="History" hint={`${events.length} update${events.length === 1 ? "" : "s"}`}>
+            {events.length === 0 ? (
+              <div className="card-body muted">No activity yet.</div>
+            ) : (
+              <ul className="timeline">
+                {events.map((event) => {
+                  const described = describeEvent(event, tz, coachNames);
+                  return (
+                    <li key={event.id}>
+                      <span className={`timeline-dot ${event.actor_type}`} />
+                      <div>
+                        <div style={{ fontWeight: 600 }}>{described.title}</div>
+                        {described.detail ? <div className="small" style={{ color: "var(--ink-2)" }}>{described.detail}</div> : null}
+                        <div className="small faint">{formatDateTime(event.created_at, tz)}</div>
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </Fold>
         </aside>
       </div>
     </>

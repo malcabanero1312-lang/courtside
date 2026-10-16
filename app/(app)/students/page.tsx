@@ -3,7 +3,7 @@ import Link from "next/link";
 import { requireSession } from "@/lib/session";
 import type { Student } from "@/lib/types";
 import { formatDate } from "@/lib/format";
-import { Card, EmptyState, Flash, PageHeader, one } from "@/components/ui";
+import { Card, EmptyState, Flash, Fold, PageHeader, one } from "@/components/ui";
 import { Icon } from "@/components/icons";
 import { SubmitButton } from "@/components/buttons";
 import { StudentFields } from "./student-fields";
@@ -142,13 +142,13 @@ export default async function StudentsPage({
         </Card>
 
         <aside className="stack">
-          <Card title="Add a student" padded>
+          <Fold title="Add a student" padded open={total === 0 && !q}>
             <form action={createStudent} className="stack">
               <StudentFields />
               <SubmitButton variant="primary" icon="plus">Add student</SubmitButton>
             </form>
-          </Card>
-          <Card title="Import from a spreadsheet" padded>
+          </Fold>
+          <Fold title="Import from a spreadsheet" padded>
             <form action={importStudents} className="stack">
               <p className="small muted">
                 Save your sheet as CSV with columns like <strong>Name, Phone, Email, Guardian, Notes</strong>. Students already
@@ -157,7 +157,7 @@ export default async function StudentsPage({
               <input className="input" type="file" name="file" accept=".csv,text/csv" style={{ paddingTop: 7 }} />
               <SubmitButton icon="upload" pendingText="Importing…">Import students</SubmitButton>
             </form>
-          </Card>
+          </Fold>
         </aside>
       </div>
     </>

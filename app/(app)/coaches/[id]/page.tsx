@@ -5,7 +5,7 @@ import { requireSession } from "@/lib/session";
 import { APPOINTMENT_SELECT, type AppointmentWithRelations, type Coach } from "@/lib/types";
 import { formatDate, formatDateTime, formatTimeRange, initials } from "@/lib/format";
 import { addDays, todayInZone } from "@/lib/time";
-import { Card, EmptyState, Flash, PageHeader, StatusBadge } from "@/components/ui";
+import { Card, EmptyState, Flash, Fold, PageHeader, StatusBadge } from "@/components/ui";
 import { Icon } from "@/components/icons";
 import { SubmitButton } from "@/components/buttons";
 import { CoachFields } from "../coach-fields";
@@ -196,13 +196,13 @@ export default async function CoachPage({
           </Card>
 
           {isAdmin ? (
-            <Card title="Profile" padded>
+            <Fold title="Profile" padded>
               <form action={updateCoach} className="stack">
                 <input type="hidden" name="id" value={coach.id} />
                 <CoachFields coach={coach} showActive />
                 <SubmitButton variant="primary">Save</SubmitButton>
               </form>
-            </Card>
+            </Fold>
           ) : null}
 
           {isAdmin ? (
