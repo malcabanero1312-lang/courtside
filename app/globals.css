@@ -1112,6 +1112,10 @@ a.list-item:hover {
   scroll-snap-align: start;
 }
 
+.day-strip {
+  display: none;
+}
+
 .cal-student {
   font-weight: 650;
   font-size: 13px;
@@ -1739,4 +1743,65 @@ details.fold:not([open]) > summary {
 
 details.fold[open] .fold-chevron {
   transform: rotate(90deg);
+}
+
+@media (max-width: 860px) {
+  .day-strip {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 6px;
+    padding: 10px 10px;
+    position: sticky;
+    top: calc(48px + env(safe-area-inset-top));
+    z-index: 20;
+    background: var(--surface);
+    border-bottom: 1px solid var(--line);
+  }
+  .day-chip {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1px;
+    padding: 6px 0 4px;
+    border-radius: 12px;
+    border: 1px solid var(--line);
+    background: var(--surface-2);
+    color: var(--ink);
+    font: inherit;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s, border-color 0.15s;
+  }
+  .day-chip-name {
+    font-size: 10.5px;
+    font-weight: 600;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  .day-chip-num {
+    font-family: var(--font-display);
+    font-size: 19px;
+    line-height: 1.1;
+  }
+  .day-chip-count {
+    min-height: 14px;
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--court-2);
+  }
+  .day-chip.today {
+    border-color: var(--court-3);
+  }
+  .day-chip.active {
+    background: var(--court-2);
+    border-color: var(--court-2);
+    color: #fff;
+  }
+  .day-chip.active .day-chip-name,
+  .day-chip.active .day-chip-count {
+    color: var(--ball);
+  }
+  .week-scroll {
+    border-top: none;
+  }
 }

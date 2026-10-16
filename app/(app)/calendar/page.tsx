@@ -6,7 +6,7 @@ import { formatTime, STATUS_META } from "@/lib/format";
 import { addDays, isValidDateInput, startOfWeek, todayInZone, utcToZonedInputs, zonedToUtc } from "@/lib/time";
 import { PageHeader, one } from "@/components/ui";
 import { Icon } from "@/components/icons";
-import { ScrollToToday } from "@/components/scroll-to-today";
+import { DayStrip } from "@/components/day-strip";
 
 export const metadata: Metadata = { title: "Calendar" };
 
@@ -160,7 +160,15 @@ export default async function CalendarPage({
           </div>
         </form>
 
-        <ScrollToToday />
+        <DayStrip
+          days={days.map((day, index) => ({
+            date: day,
+            weekday: DAY_NAMES[index],
+            dayNumber: Number(day.slice(8, 10)),
+            count: byDay.get(day)?.length ?? 0,
+            isToday: day === today
+          }))}
+        />
         <div className="week-scroll">
           <div className="week">
             {days.map((day, index) => {
