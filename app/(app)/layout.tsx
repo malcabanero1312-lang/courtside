@@ -136,7 +136,10 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
             </div>
           </div>
         </div>
-        <main className="main">{children}</main>
+        <main className="main">
+          <span hidden data-rendered-at={new Date().toISOString()} />
+          {children}
+        </main>
       </div>
 
       <nav className="bottom-nav" aria-label="Main">

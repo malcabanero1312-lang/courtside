@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#12392c" />
+    <title>Offline · Courtside</title>
+    <style>
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        background: #f5f3ed;
+        color: #15201b;
+        font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+        padding: 24px;
+        box-sizing: border-box;
+      }
+      .card {
+        max-width: 380px;
+        background: #fff;
+        border: 1px solid #e6e1d6;
+        border-radius: 16px;
+        padding: 28px 24px;
+        text-align: center;
+        box-shadow: 0 4px 16px rgba(21, 32, 27, 0.06);
+      }
+      img {
+        width: 56px;
+        height: 56px;
+        border-radius: 14px;
+      }
+      h1 {
+        font-size: 22px;
+        margin: 14px 0 8px;
+      }
+      p {
+        color: #6f7a73;
+        line-height: 1.5;
+        margin: 0 0 18px;
+      }
+      .row {
+        display: flex;
+        gap: 10px;
+        justify-content: center;
+        flex-wrap: wrap;
+      }
+      a,
+      button {
+        font: inherit;
+        font-weight: 600;
+        font-size: 14px;
+        padding: 10px 16px;
+        border-radius: 10px;
+        border: 1px solid #d4cdbd;
+        background: #fff;
+        color: #15201b;
+        text-decoration: none;
+        cursor: pointer;
+      }
+      button {
+        background: #1d5c45;
+        border-color: #1d5c45;
+        color: #fff;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <img src="/icons/icon-192.png" alt="" />
+      <h1>You're offline</h1>
+      <p>This page hasn't been saved on this phone yet. Pages you've opened before still work offline. Connect to the internet to load this one.</p>
+      <div class="row">
+        <a href="/dashboard">Go to Today</a>
+        <button type="button" onclick="location.reload()">Try again</button>
+      </div>
+    </div>
+  </body>
+</html>

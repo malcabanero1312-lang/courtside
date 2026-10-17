@@ -4,6 +4,7 @@ import { Fraunces, Inter } from "next/font/google";
 import "./globals.css";
 import { PullToRefresh } from "@/components/pull-to-refresh";
 import { NavigationProgress } from "@/components/navigation-progress";
+import { OfflineManager } from "@/components/offline-manager";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter", display: "swap" });
 const fraunces = Fraunces({ subsets: ["latin"], variable: "--font-fraunces", display: "swap" });
@@ -37,6 +38,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
           <NavigationProgress />
         </Suspense>
         <PullToRefresh />
+        <OfflineManager />
         {children}
       </body>
     </html>
