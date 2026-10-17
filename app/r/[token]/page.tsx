@@ -1,39 +1,42 @@
 import type { ReactNode } from "react";
 import type { Metadata } from "next";
-import { createAnonClient } from "@/lib/supabase/admin";
+import { getPortalData, portalWhen } from "@/lib/portal";
 import { getSession } from "@/lib/session";
 import { durationLabel, formatDate, formatTimeRange, minutesBetween, STATUS_META } from "@/lib/format";
 import type { AppointmentStatus } from "@/lib/types";
 import { Icon } from "@/components/icons";
 import { ResponseForm } from "./response-form";
 
-export const metadata: Metadata = {
-  title: "Your tennis session",
-  robots: { index: false, follow: false }
-};
+export async function generateMetadata({ params }: { params: Promise<{ token: string }> }): Promise<Metadata> {
+  const { token } = await params;
+  const page = await getPortalData(token);
+  const base: Metadata = { robots: { index: false, follow: false } };
+  if (!page.found) return { ...base, title: "Your tennis session" };
+  const when = portalWhen(page);
+  const answerable = page.state === "open";
+  const title = answerable ? "Tap to confirm your tennis session" : "Your tennis session";
+  const description = [
+    `${when.day} · ${when.time}`,
+    page.coach ? `Coach ${page.coach}` : null,
+    [page.venue, page.court].filter(Boolean).join(", ") || null
+  ]
+    .filter(Boolean)
+    .join(" · ");
+  return {
+    ...base,
+    title,
+    description,
+    openGraph: {
+      title,
+      description: answerable ? `${description}. Confirm, decline or ask for another time.` : description,
+      siteName: page.org_name ?? "Courtside",
+      type: "website"
+    },
+    twitter: { card: "summary_large_image", title, description }
+  };
+}
 export const dynamic = "force-dynamic";
 
-interface PortalData {
-  found: boolean;
-  state?: "open" | "answered" | "expired" | "revoked" | "past" | "closed";
-  reference?: string;
-  status?: AppointmentStatus;
-  starts_at?: string;
-  ends_at?: string;
-  timezone?: string;
-  student_first_name?: string;
-  coach?: string;
-  venue?: string;
-  venue_address?: string | null;
-  maps_url?: string | null;
-  court?: string | null;
-  session_type?: string | null;
-  org_name?: string;
-  brand_color?: string;
-  cancellation_policy?: string | null;
-  contact_phone?: string | null;
-  student_note?: string | null;
-}
 
 const ANSWERED: Partial<Record<AppointmentStatus, { title: string; body: string }>> = {
   pending_approval: {
@@ -105,9 +108,7 @@ function Message({ title, body }: { title: string; body: string }) {
 
 export default async function PortalPage({ params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
-  const supabase = createAnonClient();
-  const { data } = await supabase.rpc("get_response_page", { p_token: token });
-  const page = (data ?? { found: false }) as PortalData;
+  const page = await getPortalData(token);
 
   if (!page.found || !page.starts_at || !page.ends_at || !page.timezone || !page.status) {
     return (

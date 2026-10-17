@@ -2,6 +2,7 @@ import { Suspense, type ReactNode } from "react";
 import type { Metadata, Viewport } from "next";
 import { Fraunces, Inter } from "next/font/google";
 import "./globals.css";
+import { appUrl } from "@/lib/env";
 import { PullToRefresh } from "@/components/pull-to-refresh";
 import { NavigationProgress } from "@/components/navigation-progress";
 import { OfflineManager } from "@/components/offline-manager";
@@ -10,6 +11,7 @@ const inter = Inter({ subsets: ["latin"], variable: "--font-inter", display: "sw
 const fraunces = Fraunces({ subsets: ["latin"], variable: "--font-fraunces", display: "swap" });
 
 export const metadata: Metadata = {
+  metadataBase: new URL(appUrl()),
   title: { default: "Courtside", template: "%s · Courtside" },
   description: "Tennis appointment management for coaches, agents and clubs.",
   applicationName: "Courtside",
