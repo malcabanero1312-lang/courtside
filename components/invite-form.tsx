@@ -4,6 +4,7 @@ import { useActionState, useState } from "react";
 import { inviteWithLogin, type InviteState } from "@/app/(app)/team/invite-actions";
 import { CopyButton, SubmitButton } from "@/components/buttons";
 import { Icon } from "@/components/icons";
+import { openWhatsApp } from "@/lib/whatsapp";
 
 const ROLE_HELP: Record<string, string> = {
   agent: "Books and manages appointments, students and messages",
@@ -54,7 +55,16 @@ export function InviteForm({
         </div>
         <textarea className="input wa-preview" readOnly value={message} style={{ minHeight: 190, fontFamily: "inherit" }} />
         <div className="row wrap">
-          <a className="btn whatsapp" href={`https://wa.me/?text=${encodeURIComponent(message)}`} target="_blank" rel="noopener noreferrer">
+          <a
+            className="btn whatsapp"
+            href={`https://wa.me/?text=${encodeURIComponent(message)}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={(event) => {
+              event.preventDefault();
+              openWhatsApp(null, message);
+            }}
+          >
             <Icon name="whatsapp" size={17} /> Send on WhatsApp
           </a>
           <CopyButton text={message} label="Copy message" />

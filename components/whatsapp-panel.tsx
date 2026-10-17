@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { Icon } from "@/components/icons";
 import { CopyButton } from "@/components/buttons";
 import { logWhatsApp } from "@/app/(app)/appointments/actions";
-import { whatsappLink } from "@/lib/whatsapp";
+import { openWhatsApp, whatsappLink } from "@/lib/whatsapp";
 
 interface Message {
   key: string;
@@ -101,10 +101,12 @@ export function WhatsAppPanel({
               href={href}
               target="_blank"
               rel="noopener noreferrer"
-              onClick={() => {
+              onClick={(event) => {
+                event.preventDefault();
                 setOpened(true);
                 setError(null);
                 logWhatsApp(appointmentId, "opened", key, target).catch(() => undefined);
+                openWhatsApp(phone, text);
               }}
             >
               <Icon name="whatsapp" size={18} />
