@@ -35,10 +35,21 @@ export function isPhoneDevice(): boolean {
   return /Android|iPhone|iPad|iPod/i.test(ua) || iPadOs;
 }
 
+export function whatsappWebLink(phoneDigits: string | null, message: string): string {
+  const params = new URLSearchParams();
+  if (phoneDigits) params.set("phone", phoneDigits);
+  params.set("text", message);
+  return `https://web.whatsapp.com/send?${params.toString().replace(/\+/g, "%20")}`;
+}
+
+export function openWhatsAppDesktopApp(phoneDigits: string | null, message: string): void {
+  window.location.href = whatsappAppLink(phoneDigits, message);
+}
+
 export function openWhatsApp(phoneDigits: string | null, message: string): void {
   const web = phoneDigits ? whatsappLink(phoneDigits, message) : `https://wa.me/?text=${encodeURIComponent(message)}`;
   if (!isPhoneDevice()) {
-    window.open(web, "_blank", "noopener,noreferrer");
+    window.open(whatsappWebLink(phoneDigits, message), "courtside-whatsapp");
     return;
   }
   let left = false;

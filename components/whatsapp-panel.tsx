@@ -1,11 +1,11 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Icon } from "@/components/icons";
 import { CopyButton } from "@/components/buttons";
 import { logWhatsApp } from "@/app/(app)/appointments/actions";
-import { openWhatsApp, whatsappLink } from "@/lib/whatsapp";
+import { isPhoneDevice, openWhatsApp, openWhatsAppDesktopApp, whatsappLink } from "@/lib/whatsapp";
 
 interface Message {
   key: string;
@@ -43,6 +43,11 @@ export function WhatsAppPanel({
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
   const [pending, startTransition] = useTransition();
+  const [onComputer, setOnComputer] = useState(false);
+
+  useEffect(() => {
+    setOnComputer(!isPhoneDevice());
+  }, []);
 
   const text = drafts[key] ?? "";
   const href = phone ? whatsappLink(phone, text) : "#";
@@ -112,6 +117,20 @@ export function WhatsAppPanel({
               <Icon name="whatsapp" size={18} />
               Open WhatsApp
             </a>
+            {onComputer ? (
+              <button
+                type="button"
+                className="btn"
+                onClick={() => {
+                  setOpened(true);
+                  setError(null);
+                  logWhatsApp(appointmentId, "opened", key, target).catch(() => undefined);
+                  openWhatsAppDesktopApp(phone, text);
+                }}
+              >
+                <Icon name="whatsapp" size={17} /> Desktop app
+              </button>
+            ) : null}
             <CopyButton text={text} label="Copy text" onCopied={() => setOpened(true)} />
             <span className="small muted">To +{phone}</span>
           </div>
