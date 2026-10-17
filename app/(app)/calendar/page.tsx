@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { requireSession, isStaff } from "@/lib/session";
 import { groupShared } from "@/lib/shared-lessons";
+import { venueColor } from "@/lib/venue-colors";
 import { APPOINTMENT_SELECT, type AppointmentWithRelations, type Coach, type Venue } from "@/lib/types";
 import { formatTime, STATUS_META } from "@/lib/format";
 import { addDays, isValidDateInput, startOfWeek, todayInZone, utcToZonedInputs, zonedToUtc } from "@/lib/time";
@@ -45,11 +46,20 @@ export default async function CalendarPage({
   const [{ data }, coachesRes, venuesRes] = await Promise.all([
     query,
     supabase.from("coaches").select("id, full_name, color, is_active").eq("org_id", org.id).order("full_name"),
-    supabase.from("venues").select("id, name").eq("org_id", org.id).order("name")
+    supabase.from("venues").select("*").eq("org_id", org.id).order("name")
   ]);
   const appointments = (data ?? []) as unknown as AppointmentWithRelations[];
   const coaches = (coachesRes.data ?? []) as Pick<Coach, "id" | "full_name" | "color" | "is_active">[];
-  const venues = (venuesRes.data ?? []) as Pick<Venue, "id" | "name">[];
+  const venues = (venuesRes.data ?? []) as (Pick<Venue, "id" | "name" | "is_active"> & { color?: string | null })[];
+  const venueColorOf = new Map(venues.map((v) => [v.id, venueColor(v, venues)]));
+  const venueNameOf = new Map(venues.map((v) => [v.id, v.name]));
+  const venueTag = (id: string) =>
+    venueNameOf.get(id) ? (
+      <div className="cal-venue" style={{ color: venueColorOf.get(id), borderColor: venueColorOf.get(id) }}>
+        <span className="venue-dot" style={{ background: venueColorOf.get(id) }} />
+        <span className="cal-venue-name">{venueNameOf.get(id)}</span>
+      </div>
+    ) : null;
 
   const nowMs = Date.now();
   const isPast = (a: { ends_at: string }) => new Date(a.ends_at).getTime() < nowMs;
@@ -160,7 +170,15 @@ export default async function CalendarPage({
           <button className="btn small" type="submit">
             Apply
           </button>
-          <div className="row wrap" style={{ marginLeft: "auto", gap: 12 }}>
+          <div className="row wrap cal-legend" style={{ marginLeft: "auto", gap: 12 }}>
+            {venues
+              .filter((v) => v.is_active)
+              .map((v) => (
+                <span key={v.id} className="row small" style={{ gap: 6 }}>
+                  <span className="venue-square" style={{ background: venueColorOf.get(v.id) }} />
+                  {v.name}
+                </span>
+              ))}
             {coaches
               .filter((c) => c.is_active)
               .slice(0, 8)
@@ -234,6 +252,7 @@ export default async function CalendarPage({
                                     {g.coach?.full_name}
                                     {g.court ? ` · ${g.court.name}` : ""}
                                   </div>
+                                  {venueTag(g.venue_id)}
                                   <div style={{ marginTop: 4 }}>
                                     <span className={`badge tone-${STATUS_META[g.status].tone}`} style={{ height: 18, fontSize: 10.5, padding: "0 6px" }}>
                                       {STATUS_META[g.status].label}
@@ -264,6 +283,7 @@ export default async function CalendarPage({
                           {a.coach?.full_name}
                           {a.court ? ` · ${a.court.name}` : ""}
                         </div>
+                        {venueTag(a.venue_id)}
                         <div style={{ marginTop: 4 }}>
                           <span className={`badge tone-${STATUS_META[a.status].tone}`} style={{ height: 18, fontSize: 10.5, padding: "0 6px" }}>
                             {STATUS_META[a.status].label}
