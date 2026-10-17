@@ -1963,3 +1963,55 @@ details.fold[open] .fold-chevron {
     border: 1px dashed var(--line-strong);
   }
 }
+
+input[type="time"],
+input[type="date"] {
+  -webkit-appearance: none;
+  appearance: none;
+  min-width: 0;
+  text-align: left;
+}
+
+input[type="time"]::-webkit-date-and-time-value,
+input[type="date"]::-webkit-date-and-time-value {
+  text-align: left;
+  margin: 0;
+}
+
+.hours-day,
+.hours-main,
+.hours-times,
+.hours-field,
+.hours-break,
+.hours-breaks {
+  min-width: 0;
+}
+
+.hours-field .input {
+  min-width: 0;
+  max-width: 100%;
+}
+
+@media (max-width: 860px) {
+  .hours-day {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  .hours-times {
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  }
+  .hours-break {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  .hours-field .input {
+    padding: 0 10px;
+  }
+}
+
+@media (max-width: 360px) {
+  .hours-sep {
+    display: none;
+  }
+  .hours-times {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+}
