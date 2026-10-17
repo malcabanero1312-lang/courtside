@@ -489,6 +489,20 @@ export function MonthlySchedules({
                     </button>
                   ) : null}
                   {record && record.status === "sent" && locked ? (
+                    <button
+                      type="button"
+                      className="btn small whatsapp"
+                      onClick={() =>
+                        openWhatsApp(
+                          student.phone,
+                          buildMonthlyStudentMessage(student.name.split(" ")[0], month, record.entries, `${window.location.origin}/m/${record.token}`)
+                        )
+                      }
+                    >
+                      <Icon name="whatsapp" size={15} /> Send again
+                    </button>
+                  ) : null}
+                  {record && record.status === "sent" && locked ? (
                     <button type="button" className="btn small" onClick={() => copyLinkMessage(student)}>
                       <Icon name={copiedFor === student.id ? "check" : "copy"} size={14} /> {copiedFor === student.id ? "Copied" : "Copy message"}
                     </button>
