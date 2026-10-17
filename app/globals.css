@@ -2158,3 +2158,28 @@ input[type="date"]::-webkit-date-and-time-value {
   font: inherit;
   font-size: 12px;
 }
+
+.cal-shared:hover {
+  transform: none;
+}
+
+.cal-shared-list {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin-top: 5px;
+}
+
+.cal-shared-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 3px 5px;
+  margin: 0 -5px;
+  border-radius: 6px;
+}
+
+.cal-shared-row:hover {
+  background: var(--surface);
+}

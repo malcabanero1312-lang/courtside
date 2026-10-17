@@ -66,6 +66,15 @@ export default async function AppointmentPage({
   const { data } = await supabase.from("appointments").select(APPOINTMENT_SELECT).eq("id", id).maybeSingle();
   if (!data) notFound();
   const appt = data as unknown as AppointmentWithRelations;
+  const { data: partnerRows } = appt.share_group
+    ? await supabase
+        .from("appointments")
+        .select("id, status, student:students(full_name)")
+        .eq("share_group", appt.share_group)
+        .eq("starts_at", appt.starts_at)
+        .neq("id", appt.id)
+    : { data: [] };
+  const partners = (partnerRows ?? []) as unknown as { id: string; status: AppointmentWithRelations["status"]; student: { full_name: string } | null }[];
 
   const [eventsRes, notificationsRes, templatesRes, coachesRes, typesRes, agentsRes, nextRes] = await Promise.all([
     supabase.from("appointment_events").select("*").eq("appointment_id", id).order("created_at", { ascending: false }).limit(100),
@@ -183,6 +192,22 @@ export default async function AppointmentPage({
           </>
         }
       />
+
+      {partners.length ? (
+        <div className="notice info">
+          <Icon name="users" size={17} />
+          <div>
+            <strong>Shared lesson.</strong> {appt.student?.full_name} shares this time with{" "}
+            {partners.map((p, i) => (
+              <span key={p.id}>
+                {i > 0 ? ", " : ""}
+                <Link href={`/appointments/${p.id}`}>{p.student?.full_name ?? "another student"}</Link> ({STATUS_META[p.status].label.toLowerCase()})
+              </span>
+            ))}
+            . Each student gets their own confirmation link and message.
+          </div>
+        </div>
+      ) : null}
 
       {appt.office_approved && ["scheduled", "awaiting_response"].includes(appt.status) ? (
         <div className="notice info">

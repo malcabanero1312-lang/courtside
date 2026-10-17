@@ -129,6 +129,7 @@ export interface Appointment {
   office_approved: boolean;
   message_due_at: string | null;
   import_batch: string | null;
+  share_group?: string | null;
   created_at: string;
   updated_at: string;
   version: number;

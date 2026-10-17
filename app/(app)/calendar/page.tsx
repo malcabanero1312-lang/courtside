@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { requireSession, isStaff } from "@/lib/session";
+import { groupShared } from "@/lib/shared-lessons";
 import { APPOINTMENT_SELECT, type AppointmentWithRelations, type Coach, type Venue } from "@/lib/types";
 import { formatTime, STATUS_META } from "@/lib/format";
 import { addDays, isValidDateInput, startOfWeek, todayInZone, utcToZonedInputs, zonedToUtc } from "@/lib/time";
@@ -186,7 +187,7 @@ export default async function CalendarPage({
                     <span className="small muted">
                       {DAY_NAMES[index]} · {new Intl.DateTimeFormat("en-GB", { month: "short", timeZone: "UTC" }).format(new Date(`${day}T12:00:00Z`))}
                     </span>
-                    {items.length ? <span className="badge plain tone-slate" style={{ height: 20, fontSize: 11 }}>{items.length}</span> : null}
+                    {items.length ? <span className="badge plain tone-slate" style={{ height: 20, fontSize: 11 }}>{groupShared(items).length}</span> : null}
                     {staff && day >= today ? (
                       <Link href={`/appointments/new?date=${day}${coachFilter ? `&coach=${coachFilter}` : ""}`} className="btn ghost small" style={{ marginLeft: "auto", height: 24, padding: "0 6px" }} title="Book on this day">
                         <Icon name="plus" size={14} />
@@ -194,8 +195,33 @@ export default async function CalendarPage({
                     ) : null}
                   </div>
                   {items.length === 0 ? <span className="small faint" style={{ padding: "0 4px" }}>—</span> : null}
-                  {items.map((a) => {
-                    const dim = a.status === "cancelled" || a.status === "declined" || a.status === "not_approved";
+                  {groupShared(items).map((group) => {
+                    const a = group[0];
+                    const dim = group.every((g) => g.status === "cancelled" || g.status === "declined" || g.status === "not_approved");
+                    if (group.length > 1) {
+                      return (
+                        <div key={a.id} className={`cal-item cal-shared ${dim ? "dim" : ""}`} style={{ borderLeftColor: a.coach?.color ?? "var(--court-2)" }}>
+                          <div className="mono" style={{ fontWeight: 650 }}>
+                            {formatTime(a.starts_at, tz)}–{formatTime(a.ends_at, tz)}
+                          </div>
+                          <div className="cal-student">{group.map((g) => g.student?.full_name).join(" / ")}</div>
+                          <div className="muted">
+                            {a.coach?.full_name}
+                            {a.court ? ` · ${a.court.name}` : ""}
+                          </div>
+                          <div className="cal-shared-list">
+                            {group.map((g) => (
+                              <Link key={g.id} href={`/appointments/${g.id}`} className="cal-shared-row" title={`Open ${g.student?.full_name}'s booking`}>
+                                <span>{g.student?.full_name?.split(" ")[0]}</span>
+                                <span className={`badge tone-${STATUS_META[g.status].tone}`} style={{ height: 18, fontSize: 10.5, padding: "0 6px" }}>
+                                  {STATUS_META[g.status].label}
+                                </span>
+                              </Link>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    }
                     return (
                       <Link
                         key={a.id}

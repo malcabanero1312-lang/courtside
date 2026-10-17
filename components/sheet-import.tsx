@@ -6,6 +6,7 @@ import { Icon } from "@/components/icons";
 import { importSheetSessions, type ImportResult } from "@/app/(app)/import/actions";
 import { parseCourtSheet } from "@/lib/court-sheet";
 import { readPdfTextInBrowser } from "@/lib/pdf-browser";
+import { splitSharedNames } from "@/lib/shared-lessons";
 
 interface SheetSession {
   date: string;
@@ -192,7 +193,10 @@ export function SheetImport({
   );
 
   const included = rows.filter((r) => r.include && r.name.trim());
-  const newNames = new Set(included.filter((r) => !known.has(r.name.trim().toLowerCase())).map((r) => r.name.trim().toLowerCase()));
+  const newNames = new Set(
+    included.flatMap((r) => splitSharedNames(r.name).map((n) => n.toLowerCase())).filter((n) => !known.has(n))
+  );
+  const sharedCount = included.filter((r) => splitSharedNames(r.name).length > 1).length;
 
   const setRow = (key: string, change: Partial<Row>) => setRows((current) => current.map((r) => (r.key === key ? { ...r, ...change } : r)));
 
@@ -227,7 +231,7 @@ export function SheetImport({
           <Icon name="checkCircle" size={17} />
           <div>
             <strong>
-              Imported {result.created} session{result.created === 1 ? "" : "s"} for Coach {sheetCoach}.
+              Imported {result.created} booking{result.created === 1 ? "" : "s"} for Coach {sheetCoach}.
             </strong>{" "}
             They're approved by the office. Regular students appear in <strong>To do</strong> {daysBefore} day
             {daysBefore === 1 ? "" : "s"} before each lesson; students who aren't regular are in <strong>To do</strong> now, ready to send for
@@ -239,6 +243,12 @@ export function SheetImport({
           {result.newStudents ? (
             <li>
               {result.newStudents} new student{result.newStudents === 1 ? "" : "s"} added — add their WhatsApp numbers on the Students page.
+            </li>
+          ) : null}
+          {result.sharedLessons ? (
+            <li>
+              {result.sharedLessons} shared lesson{result.sharedLessons === 1 ? "" : "s"} — shown together on the calendar, but each student
+              confirms separately.
             </li>
           ) : null}
           {result.newCourts ? <li>{result.newCourts} court{result.newCourts === 1 ? "" : "s"} added to the venue.</li> : null}
@@ -387,7 +397,8 @@ export function SheetImport({
             <div>
               <div className="card-title">3. Check the sessions</div>
               <div className="small muted">
-                Untick anything you don't want. Group classes and past dates start unticked. You can fix a student's name. Tap
+                Untick anything you don't want. Group classes and past dates start unticked. You can fix a student's name. Two names like
+                “Lam / Kristen” become one shared lesson on the calendar, with a separate confirmation for each student. Tap
                 “Regular” to switch a student to “Not regular” — they're asked to confirm right away instead of {daysBefore} day
                 {daysBefore === 1 ? "" : "s"} before.
               </div>
@@ -413,7 +424,9 @@ export function SheetImport({
           </div>
           <div className="list">
             {rows.map((row) => {
-              const isNew = !known.has(row.name.trim().toLowerCase());
+              const names = splitSharedNames(row.name);
+              const isNew = names.some((n) => !known.has(n.toLowerCase()));
+              const allNew = names.length > 0 && names.every((n) => !known.has(n.toLowerCase()));
               return (
                 <div key={row.key} className={`list-item import-row ${row.include ? "" : "off"}`}>
                   <input
@@ -446,8 +459,11 @@ export function SheetImport({
                     </button>
                     {row.past ? <span className="badge plain tone-muted">Past</span> : null}
                     {row.group ? <span className="badge plain tone-violet">Group class</span> : null}
+                    {names.length > 1 ? <span className="badge plain tone-slate">Shared · {names.length} students</span> : null}
                     {row.name.trim() ? (
-                      <span className={`badge plain ${isNew ? "tone-ball" : "tone-green"}`}>{isNew ? "New student" : "Existing"}</span>
+                      <span className={`badge plain ${isNew ? "tone-ball" : "tone-green"}`}>
+                        {names.length > 1 && isNew && !allNew ? "Some new" : isNew ? (names.length > 1 ? "New students" : "New student") : "Existing"}
+                      </span>
                     ) : (
                       <span className="badge plain tone-red">No name</span>
                     )}
@@ -458,7 +474,9 @@ export function SheetImport({
           </div>
           <div className="row between wrap" style={{ padding: "14px 20px", borderTop: "1px solid var(--line)" }}>
             <span className="small muted">
-              {included.length} selected{newNames.size ? ` · ${newNames.size} new student${newNames.size === 1 ? "" : "s"} will be added` : ""}
+              {included.length} selected
+              {sharedCount ? ` · ${sharedCount} shared (each student gets their own confirmation)` : ""}
+              {newNames.size ? ` · ${newNames.size} new student${newNames.size === 1 ? "" : "s"} will be added` : ""}
             </span>
             <button type="button" className="btn primary" disabled={saving || !included.length || !coachId || !venueId} onClick={runImport}>
               <Icon name="check" size={16} />

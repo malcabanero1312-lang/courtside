@@ -1,3 +1,4 @@
+import { groupShared } from "@/lib/shared-lessons";
 import { NextResponse, type NextRequest } from "next/server";
 import { getSession } from "@/lib/session";
 import { buildXlsx, cellRef, type CellStyle, type Sheet, type SheetCell } from "@/lib/xlsx";
@@ -60,6 +61,9 @@ export async function GET(request: NextRequest) {
     byDay.set(key, [...(byDay.get(key) ?? []), a]);
   }
 
+  const groupedByDay = new Map<string, (typeof appointments)[]>();
+  for (const [day, list] of byDay) groupedByDay.set(day, groupShared(list));
+
   const sheets: Sheet[] = [];
   for (let w = 0; w < weeks; w++) {
     const weekStart = addDays(firstWeek, w * 7);
@@ -76,7 +80,7 @@ export async function GET(request: NextRequest) {
 
     rows.push({
       cells: days.map((day, i) => {
-        const count = byDay.get(day)?.length ?? 0;
+        const count = groupedByDay.get(day)?.length ?? 0;
         return {
           value: `${DAY_NAMES[i]}\n${shortDate(day)}\n${count} session${count === 1 ? "" : "s"}`,
           style: "header" as CellStyle
@@ -85,21 +89,29 @@ export async function GET(request: NextRequest) {
       height: 50
     });
 
-    const longest = Math.max(1, ...days.map((day) => byDay.get(day)?.length ?? 0));
+    const longest = Math.max(1, ...days.map((day) => groupedByDay.get(day)?.length ?? 0));
     for (let r = 0; r < longest; r++) {
       let maxLines = 1;
       const cells: SheetCell[] = days.map((day) => {
-        const list = byDay.get(day) ?? [];
-        const a = list[r];
+        const list = groupedByDay.get(day) ?? [];
+        const group = list[r];
+        const a = group?.[0];
         if (!a) {
           return { value: r === 0 ? "No sessions" : "", style: r === 0 ? "empty" : "cell" };
         }
         const lines = [
           `${formatTime(a.starts_at, tz)} – ${formatTime(a.ends_at, tz)}`,
-          a.student?.full_name ?? "Student",
+          group.map((g) => g.student?.full_name ?? "Student").join(" / "),
           `Coach ${a.coach?.full_name ?? ""}`.trim(),
           [a.venue?.name, a.court?.name].filter(Boolean).join(" · "),
-          [a.session_type?.name, statusLabel(a.status)].filter(Boolean).join(" · ")
+          [
+            a.session_type?.name,
+            group.length > 1 && group.some((g) => g.status !== a.status)
+              ? group.map((g) => `${(g.student?.full_name ?? "").split(" ")[0]}: ${statusLabel(g.status)}`).join(", ")
+              : statusLabel(a.status)
+          ]
+            .filter(Boolean)
+            .join(" · ")
         ].filter(Boolean);
         maxLines = Math.max(maxLines, lines.length);
         return { value: lines.join("\n"), style: styleFor(a.status) };
