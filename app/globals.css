@@ -2350,3 +2350,27 @@ input[type="date"]::-webkit-date-and-time-value {
   opacity: 0.55;
 }
 
+
+.week-nav {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: nowrap;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.week-nav .btn {
+  white-space: nowrap;
+}
+
+@media (max-width: 640px) {
+  .week-nav {
+    order: -1;
+    width: 100%;
+  }
+
+  .week-nav-today {
+    flex: 1;
+    justify-content: center;
+  }
+}

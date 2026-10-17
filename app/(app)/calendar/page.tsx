@@ -107,15 +107,17 @@ export default async function CalendarPage({
                 ))}
               </div>
             </details>
-            <Link className="btn small" href={link({ week: addDays(weekStart, -7) })} aria-label="Previous week">
-              <Icon name="chevronLeft" size={16} />
-            </Link>
-            <Link className="btn small" href={link({ week: today })}>
-              This week
-            </Link>
-            <Link className="btn small" href={link({ week: addDays(weekStart, 7) })} aria-label="Next week">
-              <Icon name="chevronRight" size={16} />
-            </Link>
+            <div className="week-nav">
+              <Link className="btn small" href={link({ week: addDays(weekStart, -7) })} aria-label="Previous week">
+                <Icon name="chevronLeft" size={16} />
+              </Link>
+              <Link className="btn small week-nav-today" href={link({ week: today })}>
+                This week
+              </Link>
+              <Link className="btn small" href={link({ week: addDays(weekStart, 7) })} aria-label="Next week">
+                <Icon name="chevronRight" size={16} />
+              </Link>
+            </div>
           </>
         }
       />
