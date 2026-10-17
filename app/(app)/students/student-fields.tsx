@@ -47,6 +47,10 @@ export function StudentFields({ student }: { student?: Partial<Student> }) {
         <input type="checkbox" name="email_opt_in" defaultChecked={student?.email_opt_in ?? true} />
         Send email confirmations and reminders
       </label>
+      <label className="check span-2">
+        <input type="checkbox" name="is_regular" defaultChecked={student?.is_regular ?? false} />
+        Regular student (fixed weekly schedule from the office sheet)
+      </label>
       <label className="field span-2">
         <span>Notes</span>
         <textarea className="input" name="notes" defaultValue={student?.notes ?? ""} maxLength={2000} placeholder="Goals, injuries, preferred times…" />

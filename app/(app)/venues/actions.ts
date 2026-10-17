@@ -72,11 +72,26 @@ export async function addCourt(formData: FormData) {
     org_id: org.id,
     venue_id: text(formData, "venue_id"),
     name,
+    alt_name: text(formData, "alt_name").slice(0, 60) || null,
     surface: text(formData, "surface") || null
   });
   if (error) back("error", error.code === "23505" ? "That venue already has a court with this name." : friendlyError(error));
   revalidatePath("/venues");
   back("notice", "Court added.");
+}
+
+export async function updateCourt(formData: FormData) {
+  const { supabase } = await requireSession(["admin"]);
+  const name = text(formData, "name");
+  if (!name) back("error", "Enter a court name.");
+  const altName = text(formData, "alt_name").slice(0, 60) || null;
+  const { error } = await supabase
+    .from("courts")
+    .update({ name, alt_name: altName, surface: text(formData, "surface") || null })
+    .eq("id", text(formData, "id"));
+  if (error) back("error", error.code === "23505" ? "That venue already has a court with this name." : friendlyError(error));
+  revalidatePath("/venues");
+  back("notice", "Court saved.");
 }
 
 export async function toggleCourt(formData: FormData) {

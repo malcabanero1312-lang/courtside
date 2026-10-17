@@ -2151,3 +2151,10 @@ input[type="date"]::-webkit-date-and-time-value {
     justify-content: flex-start;
   }
 }
+
+.import-regular {
+  cursor: pointer;
+  border: 0;
+  font: inherit;
+  font-size: 12px;
+}

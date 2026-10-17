@@ -8,19 +8,25 @@ export const metadata: Metadata = { title: "Import office sheet" };
 
 export default async function ImportPage() {
   const { supabase, org } = await requireSession(["admin", "agent"]);
-  const [coachesRes, venuesRes, studentsRes] = await Promise.all([
+  const [coachesRes, venuesRes, studentsRes, courtsRes] = await Promise.all([
     supabase.from("coaches").select("id, full_name").eq("org_id", org.id).eq("is_active", true).order("full_name"),
     supabase.from("venues").select("id, name").eq("org_id", org.id).eq("is_active", true).order("name"),
-    supabase.from("students").select("full_name").eq("org_id", org.id).limit(20000)
+    supabase.from("students").select("full_name").eq("org_id", org.id).limit(20000),
+    supabase.from("courts").select("*").eq("org_id", org.id)
   ]);
   const coaches = (coachesRes.data ?? []) as { id: string; full_name: string }[];
   const venues = (venuesRes.data ?? []) as { id: string; name: string }[];
+  const courts = ((courtsRes.data ?? []) as { venue_id: string; name: string; alt_name?: string | null }[]).map((c) => ({
+    venueId: c.venue_id,
+    name: c.name,
+    altName: c.alt_name ?? null
+  }));
   const studentNames = ((studentsRes.data ?? []) as { full_name: string }[]).map((s) => s.full_name);
 
   return (
     <>
       <PageHeader
-        eyebrow="Regular students"
+        eyebrow="Office sheet"
         title="Import office sheet"
         subtitle="Attach the monthly court bookings PDF, pick a coach, and create their approved sessions in one go."
       />
@@ -46,6 +52,7 @@ export default async function ImportPage() {
         <SheetImport
           coaches={coaches}
           venues={venues}
+          courts={courts}
           studentNames={studentNames}
           defaultDaysBefore={org.confirm_days_before ?? 2}
           today={todayInZone(org.timezone)}

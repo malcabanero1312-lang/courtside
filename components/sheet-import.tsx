@@ -29,6 +29,7 @@ interface Row extends SheetSession {
   name: string;
   group: boolean;
   past: boolean;
+  regular: boolean;
 }
 
 const GROUP_WORDS = /\b(GROUP|GRP|JR|JUNIOR|LVL|LEVEL|NOVICE|PEE ?WEE|ADVANCED|TNT|CLINIC|SQUAD|CLASS|CAMP)\b/i;
@@ -44,6 +45,10 @@ function dayLabel(date: string): string {
   );
 }
 
+function courtKey(name: string): string {
+  return name.toLowerCase().replace(/courts?/g, "court").replace(/[^a-z0-9]/g, "");
+}
+
 function bestCoachMatch(sheetCoach: string, coaches: { id: string; full_name: string }[]): string {
   const target = sheetCoach.trim().toLowerCase();
   const exact = coaches.find((c) => c.full_name.trim().toLowerCase() === target);
@@ -57,12 +62,14 @@ function bestCoachMatch(sheetCoach: string, coaches: { id: string; full_name: st
 export function SheetImport({
   coaches,
   venues,
+  courts,
   studentNames,
   defaultDaysBefore,
   today
 }: {
   coaches: { id: string; full_name: string }[];
   venues: { id: string; name: string }[];
+  courts: { venueId: string; name: string; altName: string | null }[];
   studentNames: string[];
   defaultDaysBefore: number;
   today: string;
@@ -78,6 +85,15 @@ export function SheetImport({
   const [rows, setRows] = useState<Row[]>([]);
   const [result, setResult] = useState<ImportResult | null>(null);
   const [saving, startSaving] = useTransition();
+
+  const courtLookup = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const c of courts.filter((x) => x.venueId === venueId)) {
+      map.set(courtKey(c.name), c.name);
+      if (c.altName) map.set(courtKey(c.altName), c.name);
+    }
+    return map;
+  }, [courts, venueId]);
 
   const known = useMemo(() => new Set(studentNames.map((n) => n.trim().toLowerCase())), [studentNames]);
 
@@ -95,6 +111,7 @@ export function SheetImport({
           name: s.student,
           group,
           past,
+          regular: true,
           include: Boolean(s.student.trim()) && !group && !past
         };
       })
@@ -186,7 +203,14 @@ export function SheetImport({
         coachId,
         venueId,
         daysBefore,
-        rows: included.map((r) => ({ date: r.date, startHour: r.startHour, endHour: r.endHour, court: r.court, student: r.name }))
+        rows: included.map((r) => ({
+          date: r.date,
+          startHour: r.startHour,
+          endHour: r.endHour,
+          court: r.court,
+          student: r.name,
+          regular: r.regular
+        }))
       });
       if (!res.ok) {
         setError(res.error ?? "Import failed.");
@@ -205,8 +229,9 @@ export function SheetImport({
             <strong>
               Imported {result.created} session{result.created === 1 ? "" : "s"} for Coach {sheetCoach}.
             </strong>{" "}
-            They're approved by the office and will appear in <strong>To do</strong> {daysBefore} day{daysBefore === 1 ? "" : "s"} before
-            each lesson, ready to send for confirmation.
+            They're approved by the office. Regular students appear in <strong>To do</strong> {daysBefore} day
+            {daysBefore === 1 ? "" : "s"} before each lesson; students who aren't regular are in <strong>To do</strong> now, ready to send for
+            confirmation.
           </div>
         </div>
         <ul className="small" style={{ margin: 0, paddingLeft: 18 }}>
@@ -362,7 +387,9 @@ export function SheetImport({
             <div>
               <div className="card-title">3. Check the sessions</div>
               <div className="small muted">
-                Untick anything you don't want. Group classes and past dates start unticked. You can fix a student's name.
+                Untick anything you don't want. Group classes and past dates start unticked. You can fix a student's name. Tap
+                “Regular” to switch a student to “Not regular” — they're asked to confirm right away instead of {daysBefore} day
+                {daysBefore === 1 ? "" : "s"} before.
               </div>
             </div>
             <div className="row" style={{ gap: 6 }}>
@@ -371,6 +398,16 @@ export function SheetImport({
               </button>
               <button type="button" className="btn small ghost" onClick={() => setRows((r) => r.map((x) => ({ ...x, include: false })))}>
                 Untick all
+              </button>
+              <button
+                type="button"
+                className="btn small ghost"
+                onClick={() => setRows((r) => {
+                  const allRegular = r.every((x) => x.regular);
+                  return r.map((x) => ({ ...x, regular: !allRegular }));
+                })}
+              >
+                {rows.every((x) => x.regular) ? "All not regular" : "All regular"}
               </button>
             </div>
           </div>
@@ -389,7 +426,7 @@ export function SheetImport({
                   <div className="import-when">
                     <strong>{dayLabel(row.date)}</strong>
                     <span className="small muted">
-                      {hourLabel(row.startHour)}–{hourLabel(row.endHour)} · {row.court}
+                      {hourLabel(row.startHour)}–{hourLabel(row.endHour)} · {courtLookup.get(courtKey(row.court)) ?? row.court}
                     </span>
                   </div>
                   <input
@@ -399,6 +436,14 @@ export function SheetImport({
                     aria-label="Student name"
                   />
                   <div className="import-tags">
+                    <button
+                      type="button"
+                      className={`badge plain import-regular ${row.regular ? "tone-green" : "tone-muted"}`}
+                      onClick={() => setRow(row.key, { regular: !row.regular })}
+                      title="Switch between regular and not regular"
+                    >
+                      {row.regular ? "Regular" : "Not regular"}
+                    </button>
                     {row.past ? <span className="badge plain tone-muted">Past</span> : null}
                     {row.group ? <span className="badge plain tone-violet">Group class</span> : null}
                     {row.name.trim() ? (

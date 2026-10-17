@@ -57,6 +57,7 @@ export interface Student {
   guardian_name: string | null;
   notes: string | null;
   is_archived: boolean;
+  is_regular?: boolean;
   created_at: string;
 }
 
@@ -89,6 +90,7 @@ export interface Court {
   org_id: string;
   venue_id: string;
   name: string;
+  alt_name?: string | null;
   surface: string | null;
   is_active: boolean;
 }

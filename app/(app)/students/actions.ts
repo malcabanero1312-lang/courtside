@@ -30,7 +30,8 @@ function readStudent(formData: FormData, countryCode: string) {
       level: text(formData, "level") || null,
       notes: text(formData, "notes") || null,
       preferred_channel: text(formData, "preferred_channel") === "email" ? "email" : "whatsapp",
-      email_opt_in: formData.get("email_opt_in") === "on"
+      email_opt_in: formData.get("email_opt_in") === "on",
+      is_regular: formData.get("is_regular") === "on"
     },
     error: !text(formData, "full_name")
       ? "Enter the student's name."

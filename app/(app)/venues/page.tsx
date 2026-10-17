@@ -5,7 +5,7 @@ import { formatDateTime } from "@/lib/format";
 import { addDays, todayInZone } from "@/lib/time";
 import { Card, EmptyState, Flash, Fold, PageHeader } from "@/components/ui";
 import { SubmitButton } from "@/components/buttons";
-import { addClosure, addCourt, createVenue, toggleCourt, updateVenue } from "./actions";
+import { addClosure, addCourt, createVenue, toggleCourt, updateCourt, updateVenue } from "./actions";
 import { deleteBlockedTime } from "../coaches/actions";
 
 export const metadata: Metadata = { title: "Venues & courts" };
@@ -98,6 +98,7 @@ export default async function VenuesPage({
                         <input type="hidden" name="active" value={court.is_active ? "0" : "1"} />
                         <span className={`badge plain ${court.is_active ? "tone-green" : "tone-muted"}`}>
                           {court.name}
+                          {court.alt_name ? ` (${court.alt_name})` : ""}
                           {court.surface ? ` · ${court.surface}` : ""}
                         </span>
                         {isAdmin ? (
@@ -112,6 +113,7 @@ export default async function VenuesPage({
                     <form action={addCourt} className="row wrap">
                       <input type="hidden" name="venue_id" value={venue.id} />
                       <input className="input" name="name" placeholder={`Court ${venueCourts.length + 1}`} style={{ width: 150 }} required />
+                      <input className="input" name="alt_name" placeholder="2nd name (optional)" style={{ width: 170 }} maxLength={60} />
                       <select className="input" name="surface" style={{ width: 140 }} defaultValue="">
                         <option value="">Surface…</option>
                         <option>Hard</option>
@@ -122,6 +124,33 @@ export default async function VenuesPage({
                       </select>
                       <SubmitButton size="small" icon="plus">Add court</SubmitButton>
                     </form>
+                  ) : null}
+                  {isAdmin && venueCourts.length > 0 ? (
+                    <details className="disclosure">
+                      <summary className="btn small ghost">Rename courts / add 2nd names</summary>
+                      <div className="stack tight" style={{ marginTop: 12 }}>
+                        <span className="small muted">
+                          The 2nd name is what the office sheet calls the court (for example “Hard Courts - 1”). The import matches either name.
+                        </span>
+                        {venueCourts.map((court) => (
+                          <form key={court.id} action={updateCourt} className="row wrap">
+                            <input type="hidden" name="id" value={court.id} />
+                            <input type="hidden" name="surface" value={court.surface ?? ""} />
+                            <input className="input" name="name" defaultValue={court.name} required maxLength={60} style={{ width: 160 }} aria-label="Court name" />
+                            <input
+                              className="input"
+                              name="alt_name"
+                              defaultValue={court.alt_name ?? ""}
+                              placeholder="2nd name"
+                              maxLength={60}
+                              style={{ width: 180 }}
+                              aria-label="Second name"
+                            />
+                            <SubmitButton size="small">Save</SubmitButton>
+                          </form>
+                        ))}
+                      </div>
+                    </details>
                   ) : null}
                   {closures.length > 0 ? (
                     <div className="stack tight">

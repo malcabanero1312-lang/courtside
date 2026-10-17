@@ -104,6 +104,7 @@ export default async function StudentsPage({
                         <Link href={`/students/${s.id}`} className="cell-main">
                           {s.full_name}
                         </Link>
+                        {s.is_regular ? <span className="badge plain tone-green" style={{ marginLeft: 6 }}>Regular</span> : null}
                         {s.guardian_name ? <div className="cell-sub">Guardian: {s.guardian_name}</div> : null}
                       </td>
                       <td>

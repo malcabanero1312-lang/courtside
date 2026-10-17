@@ -12,6 +12,7 @@ export interface ImportRow {
   endHour: number;
   court: string;
   student: string;
+  regular?: boolean;
 }
 
 export interface ImportInput {
@@ -44,6 +45,10 @@ function tidyName(raw: string): string {
   return name
     .toLowerCase()
     .replace(/(^|[\s\-'&/(])([a-z])/g, (_m, sep: string, ch: string) => sep + ch.toUpperCase());
+}
+
+function courtKey(name: string): string {
+  return name.toLowerCase().replace(/courts?/g, "court").replace(/[^a-z0-9]/g, "");
 }
 
 function hourLabel(hour: number): string {
@@ -79,30 +84,39 @@ export async function importSheetSessions(input: ImportInput): Promise<ImportRes
   if (!coach) return { ...empty, error: "Choose which Courtside coach these sessions belong to." };
   if (!venue) return { ...empty, error: "Choose the venue (club) for these courts." };
 
-  const schemaCheck = await supabase.from("appointments").select("office_approved, message_due_at, import_batch").limit(1);
-  if (schemaCheck.error) {
-    logError("import-schema", schemaCheck.error);
+  const [apptCheck, studentCheck, courtCheck] = await Promise.all([
+    supabase.from("appointments").select("office_approved, message_due_at, import_batch").limit(1),
+    supabase.from("students").select("is_regular").limit(1),
+    supabase.from("courts").select("alt_name").limit(1)
+  ]);
+  const schemaError = apptCheck.error ?? studentCheck.error ?? courtCheck.error;
+  if (schemaError) {
+    logError("import-schema", schemaError);
     return {
       ...empty,
       error:
-        "The database needs a one-time update before importing. In Supabase → SQL Editor, run the file supabase/migrations/0007_sheet_import.sql, then try again."
+        "The database needs a one-time update before importing. In Supabase → SQL Editor, run supabase/migrations/0007_sheet_import.sql and then 0008_court_names_and_regulars.sql, then try again."
     };
   }
 
   const result: ImportResult = { ...empty, ok: true };
 
-  const { data: courtRows } = await supabase.from("courts").select("id, name").eq("venue_id", venue.id);
-  const courts = new Map<string, string>((courtRows ?? []).map((c: { id: string; name: string }) => [c.name.trim().toLowerCase(), c.id]));
-  const neededCourts = Array.from(new Set(rows.map((r) => r.court.trim()).filter(Boolean))).filter((name) => !courts.has(name.toLowerCase()));
+  const { data: courtRows } = await supabase.from("courts").select("id, name, alt_name").eq("venue_id", venue.id);
+  const courts = new Map<string, string>();
+  for (const c of (courtRows ?? []) as { id: string; name: string; alt_name: string | null }[]) {
+    courts.set(courtKey(c.name), c.id);
+    if (c.alt_name) courts.set(courtKey(c.alt_name), c.id);
+  }
+  const neededCourts = Array.from(new Set(rows.map((r) => r.court.trim()).filter(Boolean))).filter((name) => !courts.has(courtKey(name)));
   if (neededCourts.length && hasAdminClient()) {
     const admin = createAdminClient();
     const { data: made, error } = await admin
       .from("courts")
-      .insert(neededCourts.map((name) => ({ org_id: org.id, venue_id: venue.id, name })))
+      .insert(neededCourts.map((name) => ({ org_id: org.id, venue_id: venue.id, name, alt_name: name })))
       .select("id, name");
     if (error) logError("import-courts", error);
     for (const c of (made ?? []) as { id: string; name: string }[]) {
-      courts.set(c.name.trim().toLowerCase(), c.id);
+      courts.set(courtKey(c.name), c.id);
       result.newCourts += 1;
     }
   }
@@ -112,6 +126,7 @@ export async function importSheetSessions(input: ImportInput): Promise<ImportRes
     (studentRows ?? []).map((s: { id: string; full_name: string }) => [s.full_name.trim().toLowerCase(), s.id])
   );
 
+  const regularMarked = new Set<string>();
   const dates = rows.map((r) => r.date).sort();
   const rangeStart = zonedToUtc(dates[0], "00:00", org.timezone).toISOString();
   const rangeEnd = zonedToUtc(dates[dates.length - 1], "23:59", org.timezone).toISOString();
@@ -144,7 +159,13 @@ export async function importSheetSessions(input: ImportInput): Promise<ImportRes
     if (!studentId) {
       const { data: created, error } = await supabase
         .from("students")
-        .insert({ org_id: org.id, full_name: name, notes: "Added from the office court sheet", created_by: user.id })
+        .insert({
+          org_id: org.id,
+          full_name: name,
+          is_regular: row.regular !== false,
+          notes: "Added from the office court sheet",
+          created_by: user.id
+        })
         .select("id")
         .single();
       if (error || !created) {
@@ -156,21 +177,26 @@ export async function importSheetSessions(input: ImportInput): Promise<ImportRes
       result.newStudents += 1;
     }
 
-    const dueAt = new Date(startsAt.getTime() - daysBefore * 86400000);
+    const regular = row.regular !== false;
+    if (regular && !regularMarked.has(studentId)) {
+      regularMarked.add(studentId);
+      await supabase.from("students").update({ is_regular: true }).eq("id", studentId).eq("is_regular", false);
+    }
+    const dueAt = regular ? new Date(startsAt.getTime() - daysBefore * 86400000) : new Date();
     const { error } = await supabase.from("appointments").insert({
       org_id: org.id,
       reference: "",
       student_id: studentId,
       coach_id: coach.id,
       venue_id: venue.id,
-      court_id: courts.get(row.court.trim().toLowerCase()) ?? null,
+      court_id: courts.get(courtKey(row.court)) ?? null,
       starts_at: startsAt.toISOString(),
       ends_at: endsAt.toISOString(),
       assigned_agent_id: membership.id,
       office_approved: true,
       message_due_at: dueAt.toISOString(),
       import_batch: batch,
-      notes: courts.has(row.court.trim().toLowerCase()) ? null : `Court on the office sheet: ${row.court}`,
+      notes: courts.has(courtKey(row.court)) ? null : `Court on the office sheet: ${row.court}`,
       created_by: user.id
     });
     if (error) {
