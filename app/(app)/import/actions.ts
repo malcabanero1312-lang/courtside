@@ -79,6 +79,16 @@ export async function importSheetSessions(input: ImportInput): Promise<ImportRes
   if (!coach) return { ...empty, error: "Choose which Courtside coach these sessions belong to." };
   if (!venue) return { ...empty, error: "Choose the venue (club) for these courts." };
 
+  const schemaCheck = await supabase.from("appointments").select("office_approved, message_due_at, import_batch").limit(1);
+  if (schemaCheck.error) {
+    logError("import-schema", schemaCheck.error);
+    return {
+      ...empty,
+      error:
+        "The database needs a one-time update before importing. In Supabase → SQL Editor, run the file supabase/migrations/0007_sheet_import.sql, then try again."
+    };
+  }
+
   const result: ImportResult = { ...empty, ok: true };
 
   const { data: courtRows } = await supabase.from("courts").select("id, name").eq("venue_id", venue.id);

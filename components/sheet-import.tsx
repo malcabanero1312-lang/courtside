@@ -4,6 +4,8 @@ import Link from "next/link";
 import { useMemo, useState, useTransition } from "react";
 import { Icon } from "@/components/icons";
 import { importSheetSessions, type ImportResult } from "@/app/(app)/import/actions";
+import { parseCourtSheet } from "@/lib/court-sheet";
+import { readPdfTextInBrowser } from "@/lib/pdf-browser";
 
 interface SheetSession {
   date: string;
@@ -99,26 +101,63 @@ export function SheetImport({
     );
   };
 
+  const showSheet = (data: ParsedSheet) => {
+    setSheet(data);
+    const matched = data.coaches.find((c) => bestCoachMatch(c, coaches));
+    chooseCoach(matched ?? data.coaches[0] ?? "", data);
+  };
+
+  const readOnServer = async (file: File): Promise<boolean> => {
+    const body = new FormData();
+    body.append("file", file);
+    const response = await fetch("/api/sheet/parse", { method: "POST", body });
+    const data = (await response.json().catch(() => ({}))) as ParsedSheet & { error?: string };
+    if (!response.ok || data.error) {
+      setError(data.error ?? `We couldn't read that file (error ${response.status}).`);
+      setSheet(null);
+      return false;
+    }
+    showSheet(data);
+    return true;
+  };
+
   const upload = async (file: File) => {
     setUploading(true);
     setError(null);
     setResult(null);
+    setSheet(null);
     setFileName(file.name);
     try {
-      const body = new FormData();
-      body.append("file", file);
-      const response = await fetch("/api/sheet/parse", { method: "POST", body });
-      const data = (await response.json().catch(() => ({}))) as ParsedSheet & { error?: string };
-      if (!response.ok || data.error) {
-        setError(data.error ?? "We couldn't read that file.");
-        setSheet(null);
+      const head = new Uint8Array(await file.slice(0, 5).arrayBuffer());
+      const isPdf = head[0] === 0x25 && head[1] === 0x50 && head[2] === 0x44 && head[3] === 0x46;
+      if (!isPdf) {
+        setError("That isn't a PDF. Download the sheet from SharePoint as PDF (or Print → Save as PDF) and try again.");
         return;
       }
-      setSheet(data);
-      const matched = data.coaches.find((c) => bestCoachMatch(c, coaches));
-      chooseCoach(matched ?? data.coaches[0] ?? "", data);
+
+      let items: Awaited<ReturnType<typeof readPdfTextInBrowser>> | null = null;
+      try {
+        items = await readPdfTextInBrowser(file);
+      } catch (browserError) {
+        console.warn("[courtside] reading the PDF in the browser failed, trying the server", browserError);
+      }
+
+      if (items === null) {
+        await readOnServer(file);
+        return;
+      }
+      if (items.length === 0) {
+        setError("This PDF has no readable text (it may be a scanned picture). Ask the office for the PDF exported from Excel.");
+        return;
+      }
+      const parsed = parseCourtSheet(items);
+      if (parsed.sessions.length === 0) {
+        setError("We couldn't find any “COACH …” bookings in this PDF. Make sure it's the office's court booking sheet.");
+        return;
+      }
+      showSheet({ sessions: parsed.sessions, coaches: parsed.coaches, notes: parsed.notes, days: parsed.days });
     } catch {
-      setError("Upload failed. Check your internet connection and try again.");
+      setError("Something went wrong reading the file. Check your internet connection and try again.");
     } finally {
       setUploading(false);
     }
