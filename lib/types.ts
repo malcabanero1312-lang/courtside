@@ -32,6 +32,7 @@ export interface Organization {
   office_name: string | null;
   office_phone: string | null;
   contact_phone: string | null;
+  confirm_days_before: number;
 }
 
 export interface Membership {
@@ -123,6 +124,9 @@ export interface Appointment {
   office_contacted_at: string | null;
   student_informed_at: string | null;
   office_note: string | null;
+  office_approved: boolean;
+  message_due_at: string | null;
+  import_batch: string | null;
   created_at: string;
   updated_at: string;
   version: number;

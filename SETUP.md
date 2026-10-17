@@ -42,6 +42,7 @@ Wait until it finishes. A few "warn" lines are normal.
 7. And then `supabase/migrations/0004_one_time_student_answer.sql` (students can answer only once).
 8. And then `supabase/migrations/0005_invites_and_user_delete.sql` (lets you delete users from Supabase).
 9. And then `supabase/migrations/0006_coach_breaks.sql` (coach breaks during the day).
+10. And then `supabase/migrations/0007_sheet_import.sql` (importing the office court sheet for regular students).
 
 > Run them in that order, once. If you see an error, read the first red line — it usually says what's wrong. Running a file twice will show "already exists" errors; that's harmless.
 

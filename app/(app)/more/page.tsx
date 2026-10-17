@@ -8,6 +8,7 @@ import type { Role } from "@/lib/types";
 export const metadata: Metadata = { title: "More" };
 
 const LINKS: { href: string; label: string; hint: string; icon: IconName; roles: Role[] }[] = [
+  { href: "/import", label: "Import office sheet", hint: "Create regular students' sessions from the court PDF", icon: "upload", roles: ["admin", "agent"] },
   { href: "/appointments", label: "Appointments list", hint: "Search, filter, bulk actions, export", icon: "list", roles: ["admin", "agent"] },
   { href: "/coaches", label: "Coaches", hint: "Working hours, breaks, time off", icon: "whistle", roles: ["admin", "agent"] },
   { href: "/venues", label: "Venues & courts", hint: "Opening hours and closures", icon: "court", roles: ["admin", "agent"] },

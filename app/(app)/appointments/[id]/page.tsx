@@ -184,6 +184,18 @@ export default async function AppointmentPage({
         }
       />
 
+      {appt.office_approved && ["scheduled", "awaiting_response"].includes(appt.status) ? (
+        <div className="notice info">
+          <Icon name="checkCircle" size={17} />
+          <div>
+            <strong>From the office sheet — the court is already approved.</strong>{" "}
+            {appt.message_due_at && new Date(appt.message_due_at).getTime() > Date.now()
+              ? `It moves to To do on ${formatDate(appt.message_due_at, tz, "short")} so you can ask the student to confirm.`
+              : "When the student confirms, it's fully confirmed — no office step needed."}
+          </div>
+        </div>
+      ) : null}
+
       {replacement ? (
         <div className="notice info">
           <Icon name="arrowRight" size={17} />
@@ -407,7 +419,7 @@ export default async function AppointmentPage({
                 <StatusForm
                   id={appt.id}
                   version={appt.version}
-                  status="pending_approval"
+                  status={appt.office_approved ? "confirmed" : "pending_approval"}
                   label="Student confirmed (by phone/chat)"
                   variant="primary"
                   icon="check"

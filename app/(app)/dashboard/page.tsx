@@ -13,6 +13,7 @@ export const metadata: Metadata = { title: "Dashboard" };
 interface Summary {
   today: number;
   to_contact: number;
+  scheduled_later: number;
   awaiting: number;
   awaiting_overdue: number;
   office_pending: number;
@@ -110,7 +111,7 @@ export default async function DashboardPage({
     { count: summary.reschedule_requests ?? 0, label: "Asked for a new time", hint: "Pick a new time and send it", href: "/appointments?view=reschedule", urgent: true },
     { count: summary.office_not_sent ?? 0, label: "Send to the office", hint: "Student confirmed — ask the office to approve", href: "/appointments?view=office", urgent: true },
     { count: summary.results_to_send ?? 0, label: "Tell the student", hint: "The office decided — send the result", href: "/appointments?view=tell_student", urgent: true },
-    { count: summary.to_contact ?? 0, label: "Message the student", hint: "Booked but not messaged yet", href: "/appointments?view=to_contact", urgent: false },
+    { count: summary.to_contact ?? 0, label: "Message the student", hint: "Due now — ask them to confirm", href: "/appointments?view=to_contact", urgent: false },
     { count: summary.awaiting_overdue ?? 0, label: "Follow up", hint: "No reply for a while", href: "/appointments?view=awaiting", urgent: false },
     {
       count: Math.max(0, (summary.office_pending ?? 0) - (summary.office_not_sent ?? 0)),

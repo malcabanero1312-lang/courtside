@@ -1,5 +1,9 @@
 const nextConfig = {
   poweredByHeader: false,
+  serverExternalPackages: ["pdfjs-dist"],
+  outputFileTracingIncludes: {
+    "/api/sheet/parse": ["./node_modules/pdfjs-dist/legacy/build/**/*"]
+  },
   async headers() {
     return [
       {

@@ -44,6 +44,7 @@ export async function updateOrganization(formData: FormData) {
       reminder_hours_before: clampInt(text(formData, "reminder_hours_before"), 0, 168, org.reminder_hours_before),
       response_link_days: clampInt(text(formData, "response_link_days"), 1, 90, org.response_link_days),
       follow_up_after_hours: clampInt(text(formData, "follow_up_after_hours"), 1, 168, org.follow_up_after_hours),
+      confirm_days_before: clampInt(text(formData, "confirm_days_before"), 0, 30, org.confirm_days_before ?? 2),
       brand_color: /^#[0-9a-fA-F]{6}$/.test(color) ? color : org.brand_color,
       reply_to_email: replyTo || null,
       notify_student_email: formData.get("notify_student_email") === "on",

@@ -124,6 +124,11 @@ export default async function SettingsPage({
                 <small>Used for suggested free times.</small>
               </label>
               <label className="field">
+                <span>Ask regular students to confirm (days before the lesson)</span>
+                <input className="input" type="number" name="confirm_days_before" min={0} max={30} defaultValue={org.confirm_days_before ?? 2} />
+                <small>Used when importing the office sheet. Sessions appear in To do on that day.</small>
+              </label>
+              <label className="field">
                 <span>Follow up when no reply after (hours)</span>
                 <input className="input" type="number" name="follow_up_after_hours" min={1} max={168} defaultValue={org.follow_up_after_hours} />
               </label>

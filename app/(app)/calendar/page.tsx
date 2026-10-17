@@ -76,6 +76,11 @@ export default async function CalendarPage({
         subtitle={`Week of ${new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", timeZone: "UTC" }).format(new Date(`${weekStart}T12:00:00Z`))} · ${appointments.length} session${appointments.length === 1 ? "" : "s"}`}
         actions={
           <>
+            {staff ? (
+              <Link className="btn small" href="/import">
+                <Icon name="upload" size={15} /> Import sheet
+              </Link>
+            ) : null}
             <details className="disclosure picker">
               <summary className="btn small">
                 <Icon name="download" size={15} /> Spreadsheet

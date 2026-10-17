@@ -201,6 +201,7 @@ const STAFF_STATUSES: AppointmentStatus[] = [
   "scheduled",
   "awaiting_response",
   "pending_approval",
+  "confirmed",
   "declined",
   "cancelled",
   "completed",
@@ -232,12 +233,16 @@ export async function changeStatus(formData: FormData) {
         : friendlyError(error)
     );
   }
+  if (status === "confirmed") {
+    await supabase.from("appointments").update({ student_informed_at: new Date().toISOString() }).eq("id", id).eq("office_approved", true);
+  }
   after(processNotificationsSoon);
   revalidatePath(path);
   revalidatePath("/appointments");
   revalidatePath("/dashboard");
   const messages: Partial<Record<AppointmentStatus, string>> = {
     pending_approval: "Recorded that the student confirmed. Next, send the booking to the office for approval.",
+    confirmed: "Marked as confirmed.",
     cancelled: "Appointment cancelled. The student's link has been switched off.",
     completed: "Marked as completed.",
     no_show: "Marked as no-show.",

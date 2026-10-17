@@ -21,6 +21,7 @@ const NAV: NavItem[] = [
   { href: "/calendar", label: "Calendar", icon: "calendar", roles: ["admin", "agent", "coach"], section: "work" },
   { href: "/appointments", label: "Appointments", icon: "list", roles: ["admin", "agent", "coach"], section: "work" },
   { href: "/students", label: "Students", icon: "users", roles: ["admin", "agent"], section: "work" },
+  { href: "/import", label: "Import sheet", icon: "upload", roles: ["admin", "agent"], section: "work" },
   { href: "/coaches", label: "Coaches", icon: "whistle", roles: ["admin", "agent", "coach"], section: "manage" },
   { href: "/venues", label: "Venues & courts", icon: "court", roles: ["admin", "agent"], section: "manage" },
   { href: "/reports", label: "Reports", icon: "chart", roles: ["admin", "agent"], section: "manage" },

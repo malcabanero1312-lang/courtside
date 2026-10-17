@@ -6,6 +6,7 @@ import { addDays, isValidDateInput, zonedToUtc } from "@/lib/time";
 export const VIEWS = [
   { key: "upcoming", label: "Upcoming" },
   { key: "to_contact", label: "To contact" },
+  { key: "later", label: "Message later" },
   { key: "awaiting", label: "Awaiting reply" },
   { key: "reschedule", label: "New time requested" },
   { key: "office", label: "Waiting for office" },
@@ -79,7 +80,10 @@ export async function queryAppointments(
       query = query.gte("ends_at", now).not("status", "in", "(cancelled,rescheduled,declined,not_approved)");
       break;
     case "to_contact":
-      query = query.gte("starts_at", now).eq("status", "scheduled");
+      query = query.gte("starts_at", now).eq("status", "scheduled").or(`message_due_at.is.null,message_due_at.lte."${now}"`);
+      break;
+    case "later":
+      query = query.gte("starts_at", now).eq("status", "scheduled").gt("message_due_at", now);
       break;
     case "awaiting":
       query = query.gte("starts_at", now).eq("status", "awaiting_response");
