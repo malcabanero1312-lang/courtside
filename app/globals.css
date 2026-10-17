@@ -3068,3 +3068,10 @@ input[type="date"]::-webkit-date-and-time-value {
   color: var(--court-2);
   font-weight: 600;
 }
+
+.venue-move-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+}

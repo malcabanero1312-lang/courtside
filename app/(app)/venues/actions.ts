@@ -154,3 +154,32 @@ export async function addClosure(formData: FormData) {
   revalidatePath("/venues");
   back("notice", "Closure added. Those hours can no longer be booked.");
 }
+
+export async function moveVenueBookings(formData: FormData) {
+  const { supabase } = await requireSession(["admin"]);
+  const returnTo = text(formData, "return_to") || "/venues";
+  const from = text(formData, "from");
+  const to = text(formData, "to");
+  if (!to) back("error", "Choose the venue to move the students to.", returnTo);
+  const { data, error } = await supabase.rpc("move_venue_bookings", { p_from: from, p_to: to, p_student: null, p_upcoming_only: true });
+  if (error) back("error", error.code === "PGRST202" ? "Run database update 0014 in Supabase first." : friendlyError(error), returnTo);
+  revalidatePath("/venues");
+  revalidatePath("/calendar");
+  revalidatePath("/regulars");
+  back("notice", `Moved ${Number(data ?? 0)} upcoming booking${Number(data ?? 0) === 1 ? "" : "s"} and the students' weekly schedules.`, returnTo);
+}
+
+export async function deleteVenue(formData: FormData) {
+  const { supabase } = await requireSession(["admin"]);
+  const returnTo = text(formData, "return_to") || "/venues";
+  const id = text(formData, "id");
+  const moveTo = text(formData, "move_to") || null;
+  const { data, error } = await supabase.rpc("delete_venue", { p_venue: id, p_move_to: moveTo });
+  if (error) back("error", error.code === "PGRST202" ? "Run database update 0014 in Supabase first." : friendlyError(error), returnTo);
+  revalidatePath("/venues");
+  revalidatePath("/settings");
+  revalidatePath("/calendar");
+  revalidatePath("/regulars");
+  const moved = Number(data ?? 0);
+  back("notice", moved ? `Venue deleted. ${moved} booking${moved === 1 ? " was" : "s were"} moved first.` : "Venue deleted.", returnTo);
+}

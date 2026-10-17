@@ -194,7 +194,7 @@ export default async function SettingsPage({
             title="Venues & courts"
             actions={
               <Link className="btn small ghost" href="/venues">
-                More
+                Move / delete
               </Link>
             }
           >

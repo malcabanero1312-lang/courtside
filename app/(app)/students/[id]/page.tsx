@@ -8,7 +8,7 @@ import { ButtonLink, Card, CoachDot, EmptyState, Flash, PageHeader, StatusBadge 
 import { Icon } from "@/components/icons";
 import { SubmitButton } from "@/components/buttons";
 import { StudentFields } from "../student-fields";
-import { addRegularSlot, deleteRegularSlot, setStudentArchived, setStudentRegular, updateStudent } from "../actions";
+import { addRegularSlot, deleteRegularSlot, moveStudentVenue, setStudentArchived, setStudentRegular, updateStudent } from "../actions";
 import { WEEKDAY_NAMES, monthLabel, timeRange12 } from "@/lib/regular";
 import { venueColor } from "@/lib/venue-colors";
 import { todayInZone } from "@/lib/time";
@@ -220,6 +220,44 @@ export default async function StudentPage({
           <Card title="History">{past.length ? list(past) : <div className="card-body muted small">No past sessions yet.</div>}</Card>
         </div>
         <aside className="stack">
+          <Card title="Venue" padded>
+            <div className="stack tight">
+              {(() => {
+                const current = Array.from(new Set(upcoming.map((a) => a.venue_id)))
+                  .map((vid) => allVenues.find((v) => v.id === vid))
+                  .filter((v): v is { id: string; name: string; color?: string | null } => Boolean(v));
+                return current.length ? (
+                  <div className="row wrap" style={{ gap: 6 }}>
+                    {current.map((v) => (
+                      <span key={v.id} className="ms-venue" style={{ color: venueColor(v, allVenues), borderColor: venueColor(v, allVenues) }}>
+                        <span className="venue-dot" style={{ background: venueColor(v, allVenues) }} /> {v.name}
+                      </span>
+                    ))}
+                  </div>
+                ) : (
+                  <span className="small faint">No upcoming bookings.</span>
+                );
+              })()}
+              {allVenues.length > 1 ? (
+                <form action={moveStudentVenue} className="venue-move-row">
+                  <input type="hidden" name="id" value={student.id} />
+                  <select className="input" name="to" defaultValue="" required aria-label="Move to venue">
+                    <option value="" disabled>
+                      Move {student.full_name.split(" ")[0]} to…
+                    </option>
+                    {allVenues.map((v) => (
+                      <option key={v.id} value={v.id}>
+                        {v.name}
+                      </option>
+                    ))}
+                  </select>
+                  <SubmitButton size="small" confirmText="Move this student's upcoming bookings and weekly schedule to the chosen venue?">
+                    Move
+                  </SubmitButton>
+                </form>
+              ) : null}
+            </div>
+          </Card>
           <Card title="Weekly schedule" padded>
             <div className="stack">
               <span className="small muted">Their fixed days and times. Used for the monthly request to the office.</span>

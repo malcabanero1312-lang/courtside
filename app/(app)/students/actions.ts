@@ -209,3 +209,29 @@ export async function setStudentRegular(formData: FormData) {
   revalidatePath("/regulars");
   back(returnTo, "notice", regular ? "Marked as a regular student." : "Marked as not regular.");
 }
+
+export async function moveStudentVenue(formData: FormData) {
+  const { supabase } = await requireSession(["admin", "agent"]);
+  const studentId = text(formData, "id");
+  const to = text(formData, "to");
+  const path = `/students/${studentId}`;
+  if (!to) back(path, "error", "Choose the venue.");
+  const [{ data: appts }, { data: slots }] = await Promise.all([
+    supabase.from("appointments").select("venue_id").eq("student_id", studentId).gte("ends_at", new Date().toISOString()),
+    supabase.from("regular_slots").select("venue_id").eq("student_id", studentId)
+  ]);
+  const fromVenues = Array.from(
+    new Set([...(appts ?? []), ...(slots ?? [])].map((r) => (r as { venue_id: string | null }).venue_id).filter((v): v is string => Boolean(v) && v !== to))
+  );
+  let moved = 0;
+  for (const from of fromVenues) {
+    const { data, error } = await supabase.rpc("move_venue_bookings", { p_from: from, p_to: to, p_student: studentId, p_upcoming_only: true });
+    if (error) back(path, "error", error.code === "PGRST202" ? "Run database update 0014 in Supabase first." : friendlyError(error));
+    moved += Number(data ?? 0);
+  }
+  await supabase.from("regular_slots").update({ venue_id: to }).eq("student_id", studentId).is("venue_id", null);
+  revalidatePath(path);
+  revalidatePath("/calendar");
+  revalidatePath("/regulars");
+  back(path, "notice", `Moved to the new venue — ${moved} upcoming booking${moved === 1 ? "" : "s"} updated.`);
+}

@@ -49,6 +49,7 @@ Wait until it finishes. A few "warn" lines are normal.
 14. And then `supabase/migrations/0011_monthly_confirmations.sql` (monthly confirmation links for regular students).
 15. And then `supabase/migrations/0012_monthly_dates_and_venue_colors.sql` (students can confirm only some dates; venue colours).
 16. And then `supabase/migrations/0013_calendar_feeds_and_coach_sheet_names.sql` (Google / iPhone calendar sync and saved coach names for the sheet import).
+17. And then `supabase/migrations/0014_move_and_delete_venues.sql` (move students between venues and delete venues).
 
 > Run them in that order, once. If you see an error, read the first red line — it usually says what's wrong. Running a file twice will show "already exists" errors; that's harmless.
 

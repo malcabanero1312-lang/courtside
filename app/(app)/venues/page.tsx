@@ -5,7 +5,7 @@ import { formatDateTime } from "@/lib/format";
 import { addDays, todayInZone } from "@/lib/time";
 import { Card, EmptyState, Flash, Fold, PageHeader } from "@/components/ui";
 import { SubmitButton } from "@/components/buttons";
-import { addClosure, addCourt, createVenue, toggleCourt, updateCourt, updateVenue } from "./actions";
+import { addClosure, addCourt, createVenue, deleteVenue, moveVenueBookings, toggleCourt, updateCourt, updateVenue } from "./actions";
 import { deleteBlockedTime } from "../coaches/actions";
 import { venueColor } from "@/lib/venue-colors";
 
@@ -51,7 +51,7 @@ export default async function VenuesPage({
   const { supabase, org, membership } = await requireSession(["admin", "agent"]);
   const isAdmin = membership.role === "admin";
   const tz = org.timezone;
-  const [venuesRes, courtsRes, blockedRes] = await Promise.all([
+  const [venuesRes, courtsRes, blockedRes, usageRes] = await Promise.all([
     supabase.from("venues").select("*").eq("org_id", org.id).order("name"),
     supabase.from("courts").select("*").eq("org_id", org.id).order("name"),
     supabase
@@ -60,8 +60,22 @@ export default async function VenuesPage({
       .eq("org_id", org.id)
       .is("coach_id", null)
       .gte("ends_at", new Date().toISOString())
-      .order("starts_at")
+      .order("starts_at"),
+    supabase
+      .from("appointments")
+      .select("venue_id, student_id")
+      .eq("org_id", org.id)
+      .gte("ends_at", new Date().toISOString())
+      .not("status", "in", "(cancelled,declined,not_approved,rescheduled)")
+      .limit(10000)
   ]);
+  const usage = new Map<string, { bookings: number; students: Set<string> }>();
+  for (const row of (usageRes.data ?? []) as { venue_id: string; student_id: string }[]) {
+    const u = usage.get(row.venue_id) ?? { bookings: 0, students: new Set<string>() };
+    u.bookings += 1;
+    u.students.add(row.student_id);
+    usage.set(row.venue_id, u);
+  }
   const venues = (venuesRes.data ?? []) as Venue[];
   const courts = (courtsRes.data ?? []) as Court[];
   const blocked = (blockedRes.data ?? []) as { id: string; venue_id: string | null; court_id: string | null; starts_at: string; ends_at: string; reason: string | null }[];
@@ -181,7 +195,7 @@ export default async function VenuesPage({
                   ) : null}
                   {isAdmin ? (
                     <details className="disclosure">
-                      <summary className="btn small ghost">Edit venue details</summary>
+                      <summary className="btn small ghost">Edit name & details</summary>
                       <form action={updateVenue} className="stack" style={{ marginTop: 12 }}>
                         <input type="hidden" name="id" value={venue.id} />
                         <VenueFields venue={venue} />
@@ -190,6 +204,58 @@ export default async function VenuesPage({
                         </label>
                         <SubmitButton size="small" variant="primary">Save venue</SubmitButton>
                       </form>
+                    </details>
+                  ) : null}
+                  {isAdmin ? (
+                    <details className="disclosure">
+                      <summary className="btn small ghost">Move students or delete venue</summary>
+                      <div className="stack" style={{ marginTop: 12 }}>
+                        <span className="small muted">
+                          {usage.get(venue.id)?.bookings ?? 0} upcoming booking{(usage.get(venue.id)?.bookings ?? 0) === 1 ? "" : "s"} for{" "}
+                          {usage.get(venue.id)?.students.size ?? 0} student{(usage.get(venue.id)?.students.size ?? 0) === 1 ? "" : "s"} at this venue.
+                          Courts with the same name at the new venue are kept; otherwise the court is left empty to choose later.
+                        </span>
+                        {venues.filter((v) => v.id !== venue.id).length === 0 ? (
+                          <span className="small faint">Add another venue first to move students there.</span>
+                        ) : (
+                          <form action={moveVenueBookings} className="venue-move-row">
+                            <input type="hidden" name="from" value={venue.id} />
+                            <select className="input" name="to" defaultValue="" required aria-label="Move to venue">
+                              <option value="" disabled>
+                                Move all students to…
+                              </option>
+                              {venues
+                                .filter((v) => v.id !== venue.id)
+                                .map((v) => (
+                                  <option key={v.id} value={v.id}>
+                                    {v.name}
+                                  </option>
+                                ))}
+                            </select>
+                            <SubmitButton size="small" confirmText="Move every upcoming booking and weekly schedule at this venue to the chosen venue?">
+                              Move
+                            </SubmitButton>
+                          </form>
+                        )}
+                        <form action={deleteVenue} className="venue-move-row">
+                          <input type="hidden" name="id" value={venue.id} />
+                          {venues.filter((v) => v.id !== venue.id).length ? (
+                            <select className="input" name="move_to" defaultValue="" aria-label="Move bookings before deleting">
+                              <option value="">Delete only if it has no bookings</option>
+                              {venues
+                                .filter((v) => v.id !== venue.id)
+                                .map((v) => (
+                                  <option key={v.id} value={v.id}>
+                                    Move all bookings to {v.name}, then delete
+                                  </option>
+                                ))}
+                            </select>
+                          ) : null}
+                          <SubmitButton size="small" variant="danger" confirmText={`Delete ${venue.name}? Its courts and closures are removed. This can't be undone.`}>
+                            Delete venue
+                          </SubmitButton>
+                        </form>
+                      </div>
                     </details>
                   ) : null}
                 </div>
