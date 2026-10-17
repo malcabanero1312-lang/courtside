@@ -1423,11 +1423,6 @@ html.ptr-active.ptr-animating .auth-page {
   transition: transform 0.25s ease;
 }
 
-.break-list {
-  margin-top: 10px;
-  padding-left: 140px;
-}
-
 .anim-in {
   animation: rise 0.35s ease both;
 }
@@ -1523,9 +1518,6 @@ html.ptr-active.ptr-animating .auth-page {
   }
   .hide-mobile {
     display: none;
-  }
-  .break-list {
-    padding-left: 0;
   }
 }
 
@@ -1803,5 +1795,171 @@ details.fold[open] .fold-chevron {
   }
   .week-scroll {
     border-top: none;
+  }
+}
+
+.hours-day {
+  display: grid;
+  grid-template-columns: 130px auto 1fr auto;
+  grid-template-areas:
+    "name main add copy"
+    ". breaks breaks breaks";
+  align-items: center;
+  column-gap: 14px;
+  row-gap: 10px;
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--line);
+}
+
+.hours-day:last-child {
+  border-bottom: none;
+}
+
+.hours-day.off {
+  background: var(--surface-2);
+}
+
+.hours-name {
+  grid-area: name;
+  font-weight: 600;
+}
+
+.hours-main {
+  grid-area: main;
+}
+
+.hours-add {
+  grid-area: add;
+  justify-self: end;
+}
+
+.hours-copy {
+  grid-area: copy;
+}
+
+.hours-breaks {
+  grid-area: breaks;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.hours-times {
+  display: grid;
+  grid-template-columns: 124px auto 124px;
+  justify-content: start;
+  align-items: end;
+  gap: 8px;
+}
+
+.hours-field {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.hours-field > span {
+  display: none;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.hours-field .input {
+  height: 36px;
+  font-variant-numeric: tabular-nums;
+}
+
+.hours-sep {
+  font-size: 12.5px;
+  color: var(--muted);
+  padding-bottom: 9px;
+}
+
+.hours-break {
+  display: grid;
+  grid-template-columns: auto minmax(160px, 240px) auto;
+  justify-content: start;
+  align-items: end;
+  gap: 8px;
+}
+
+.hours-break-tag {
+  display: none;
+}
+
+.hours-break .hours-field .input {
+  background: var(--ball-soft);
+}
+
+.hours-break-label {
+  height: 36px;
+}
+
+@media (max-width: 860px) {
+  .hours-day {
+    grid-template-columns: 1fr auto;
+    grid-template-areas:
+      "name copy"
+      "main main"
+      "breaks breaks"
+      "add add";
+    padding: 14px 16px;
+  }
+  .hours-times {
+    grid-template-columns: 1fr auto 1fr;
+    width: 100%;
+  }
+  .hours-field > span {
+    display: block;
+  }
+  .hours-field .input {
+    width: 100%;
+    height: 42px;
+  }
+  .hours-sep {
+    padding-bottom: 12px;
+  }
+  .hours-breaks {
+    gap: 10px;
+  }
+  .hours-break {
+    grid-template-columns: 1fr auto;
+    grid-template-areas:
+      "tag remove"
+      "times times"
+      "label label";
+    padding: 10px 12px;
+    border-radius: 12px;
+    background: var(--ball-soft);
+    gap: 8px;
+  }
+  .hours-break-tag {
+    display: inline-flex;
+    grid-area: tag;
+    justify-self: start;
+    justify-content: center;
+    margin: 0;
+    background: #fff;
+  }
+  .hours-break .hours-field .input {
+    background: var(--surface);
+  }
+  .hours-break .hours-times {
+    grid-area: times;
+  }
+  .hours-break-label {
+    grid-area: label;
+    width: 100%;
+    height: 42px;
+  }
+  .hours-break-remove {
+    grid-area: remove;
+  }
+  .hours-add {
+    justify-self: stretch;
+    border: 1px dashed var(--line-strong);
   }
 }

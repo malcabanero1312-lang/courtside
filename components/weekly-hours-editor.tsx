@@ -53,134 +53,129 @@ export function WeeklyHoursEditor({
     );
   };
 
+  const setBreak = (weekday: number, index: number, change: Partial<BreakSlot>) => {
+    update(weekday, (d) => ({ ...d, breaks: d.breaks.map((b, i) => (i === index ? { ...b, ...change } : b)) }));
+  };
+
   return (
     <form action={action}>
       <input type="hidden" name="coach_id" value={coachId} />
       <input type="hidden" name="schedule" value={JSON.stringify(days)} />
-      <div className="list">
+      <div className="hours-list">
         {days.map((day) => (
-          <div key={day.weekday} className="list-item" style={{ padding: "12px 20px", display: "block" }}>
-            <div className="row wrap">
-              <label className="check" style={{ width: 130 }}>
-                <input
-                  type="checkbox"
-                  checked={day.on}
-                  disabled={!canEdit}
-                  onChange={(event) => update(day.weekday, (d) => ({ ...d, on: event.target.checked }))}
-                />
-                {DAY_NAMES[day.weekday]}
-              </label>
+          <div key={day.weekday} className={`hours-day ${day.on ? "" : "off"}`}>
+            <label className="check hours-name">
+              <input
+                type="checkbox"
+                checked={day.on}
+                disabled={!canEdit}
+                onChange={(event) => update(day.weekday, (d) => ({ ...d, on: event.target.checked }))}
+              />
+              {DAY_NAMES[day.weekday]}
+            </label>
+
+            <div className="hours-main">
               {day.on ? (
-                <>
-                  <input
-                    className="input"
-                    type="time"
-                    value={day.start}
-                    disabled={!canEdit}
-                    style={{ width: 125 }}
-                    aria-label={`${DAY_NAMES[day.weekday]} start`}
-                    onChange={(event) => update(day.weekday, (d) => ({ ...d, start: event.target.value }))}
-                  />
-                  <span className="muted">to</span>
-                  <input
-                    className="input"
-                    type="time"
-                    value={day.end}
-                    disabled={!canEdit}
-                    style={{ width: 125 }}
-                    aria-label={`${DAY_NAMES[day.weekday]} end`}
-                    onChange={(event) => update(day.weekday, (d) => ({ ...d, end: event.target.value }))}
-                  />
-                  {canEdit ? (
-                    <div className="row" style={{ marginLeft: "auto" }}>
-                      <button
-                        type="button"
-                        className="btn small ghost"
-                        onClick={() =>
-                          update(day.weekday, (d) => {
-                            const last = d.breaks[d.breaks.length - 1];
-                            const start = last ? last.end : "12:00";
-                            return { ...d, breaks: [...d.breaks, { start, end: addMinutes(start, 60), label: "" }] };
-                          })
-                        }
-                      >
-                        <Icon name="plus" size={14} /> Add break
-                      </button>
-                      <button type="button" className="btn small ghost" onClick={() => copyToAll(day)} title="Copy these hours and breaks to all working days">
-                        <Icon name="copy" size={14} /> Copy to all days
-                      </button>
-                    </div>
-                  ) : null}
-                </>
+                <div className="hours-times">
+                  <label className="hours-field">
+                    <span>Start</span>
+                    <input
+                      className="input"
+                      type="time"
+                      value={day.start}
+                      disabled={!canEdit}
+                      onChange={(event) => update(day.weekday, (d) => ({ ...d, start: event.target.value }))}
+                    />
+                  </label>
+                  <span className="hours-sep">to</span>
+                  <label className="hours-field">
+                    <span>End</span>
+                    <input
+                      className="input"
+                      type="time"
+                      value={day.end}
+                      disabled={!canEdit}
+                      onChange={(event) => update(day.weekday, (d) => ({ ...d, end: event.target.value }))}
+                    />
+                  </label>
+                </div>
               ) : (
                 <span className="small faint">Day off</span>
               )}
             </div>
 
+            {day.on && canEdit ? (
+              <button type="button" className="btn small ghost hours-copy" onClick={() => copyToAll(day)} title="Copy these hours and breaks to all working days">
+                <Icon name="copy" size={14} /> Copy to all
+              </button>
+            ) : null}
+
             {day.on && day.breaks.length > 0 ? (
-              <div className="stack tight break-list">
+              <div className="hours-breaks">
                 {day.breaks.map((slot, index) => (
-                  <div key={index} className="row wrap" style={{ gap: 8 }}>
-                    <span className="badge plain tone-ball" style={{ width: 64, justifyContent: "center" }}>
-                      Break
-                    </span>
+                  <div key={index} className="hours-break">
+                    <span className="badge plain tone-ball hours-break-tag">Break</span>
+                    <div className="hours-times">
+                      <label className="hours-field">
+                        <span>From</span>
+                        <input
+                          className="input"
+                          type="time"
+                          value={slot.start}
+                          disabled={!canEdit}
+                          onChange={(event) => setBreak(day.weekday, index, { start: event.target.value })}
+                        />
+                      </label>
+                      <span className="hours-sep">to</span>
+                      <label className="hours-field">
+                        <span>Until</span>
+                        <input
+                          className="input"
+                          type="time"
+                          value={slot.end}
+                          disabled={!canEdit}
+                          onChange={(event) => setBreak(day.weekday, index, { end: event.target.value })}
+                        />
+                      </label>
+                    </div>
                     <input
-                      className="input"
-                      type="time"
-                      value={slot.start}
-                      disabled={!canEdit}
-                      style={{ width: 120, height: 34 }}
-                      aria-label="Break start"
-                      onChange={(event) =>
-                        update(day.weekday, (d) => ({
-                          ...d,
-                          breaks: d.breaks.map((b, i) => (i === index ? { ...b, start: event.target.value } : b))
-                        }))
-                      }
-                    />
-                    <span className="muted small">to</span>
-                    <input
-                      className="input"
-                      type="time"
-                      value={slot.end}
-                      disabled={!canEdit}
-                      style={{ width: 120, height: 34 }}
-                      aria-label="Break end"
-                      onChange={(event) =>
-                        update(day.weekday, (d) => ({
-                          ...d,
-                          breaks: d.breaks.map((b, i) => (i === index ? { ...b, end: event.target.value } : b))
-                        }))
-                      }
-                    />
-                    <input
-                      className="input"
+                      className="input hours-break-label"
                       value={slot.label}
                       disabled={!canEdit}
-                      placeholder="Lunch, rest, travel…"
+                      placeholder="Break: lunch, rest, travel…"
                       maxLength={60}
-                      style={{ width: 170, height: 34 }}
                       aria-label="Break label"
-                      onChange={(event) =>
-                        update(day.weekday, (d) => ({
-                          ...d,
-                          breaks: d.breaks.map((b, i) => (i === index ? { ...b, label: event.target.value } : b))
-                        }))
-                      }
+                      onChange={(event) => setBreak(day.weekday, index, { label: event.target.value })}
                     />
                     {canEdit ? (
                       <button
                         type="button"
-                        className="btn small ghost"
+                        className="btn small ghost hours-break-remove"
                         aria-label="Remove break"
                         onClick={() => update(day.weekday, (d) => ({ ...d, breaks: d.breaks.filter((_, i) => i !== index) }))}
                       >
-                        <Icon name="trash" size={14} />
+                        <Icon name="trash" size={15} />
                       </button>
                     ) : null}
                   </div>
                 ))}
               </div>
+            ) : null}
+
+            {day.on && canEdit ? (
+              <button
+                type="button"
+                className="btn small ghost hours-add"
+                onClick={() =>
+                  update(day.weekday, (d) => {
+                    const last = d.breaks[d.breaks.length - 1];
+                    const start = last ? last.end : "12:00";
+                    return { ...d, breaks: [...d.breaks, { start, end: addMinutes(start, 60), label: "" }] };
+                  })
+                }
+              >
+                <Icon name="plus" size={14} /> Add break
+              </button>
             ) : null}
           </div>
         ))}
