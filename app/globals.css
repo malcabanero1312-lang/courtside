@@ -2159,27 +2159,35 @@ input[type="date"]::-webkit-date-and-time-value {
   font-size: 12px;
 }
 
-.cal-shared:hover {
-  transform: none;
-}
-
-.cal-shared-list {
+.cal-shared {
   display: flex;
   flex-direction: column;
-  gap: 3px;
-  margin-top: 5px;
+  gap: 4px;
+  padding: 5px;
+  border-radius: 11px;
+  border: 1px dashed var(--line-strong, var(--line));
 }
 
-.cal-shared-row {
+.cal-shared-head {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 6px;
-  padding: 3px 5px;
-  margin: 0 -5px;
-  border-radius: 6px;
+  gap: 4px;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--muted, inherit);
+  padding: 0 3px;
 }
 
-.cal-shared-row:hover {
-  background: var(--surface);
+.cal-shared-boxes {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+  gap: 5px;
+}
+
+.cal-shared-boxes .cal-item {
+  min-width: 0;
+}
+
+.cal-shared-boxes .cal-student {
+  overflow-wrap: anywhere;
 }

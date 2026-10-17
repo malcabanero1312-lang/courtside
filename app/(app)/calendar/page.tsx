@@ -187,7 +187,7 @@ export default async function CalendarPage({
                     <span className="small muted">
                       {DAY_NAMES[index]} · {new Intl.DateTimeFormat("en-GB", { month: "short", timeZone: "UTC" }).format(new Date(`${day}T12:00:00Z`))}
                     </span>
-                    {items.length ? <span className="badge plain tone-slate" style={{ height: 20, fontSize: 11 }}>{groupShared(items).length}</span> : null}
+                    {items.length ? <span className="badge plain tone-slate" style={{ height: 20, fontSize: 11 }}>{items.length}</span> : null}
                     {staff && day >= today ? (
                       <Link href={`/appointments/new?date=${day}${coachFilter ? `&coach=${coachFilter}` : ""}`} className="btn ghost small" style={{ marginLeft: "auto", height: 24, padding: "0 6px" }} title="Book on this day">
                         <Icon name="plus" size={14} />
@@ -197,27 +197,40 @@ export default async function CalendarPage({
                   {items.length === 0 ? <span className="small faint" style={{ padding: "0 4px" }}>—</span> : null}
                   {groupShared(items).map((group) => {
                     const a = group[0];
-                    const dim = group.every((g) => g.status === "cancelled" || g.status === "declined" || g.status === "not_approved");
+                    const dim = a.status === "cancelled" || a.status === "declined" || a.status === "not_approved";
                     if (group.length > 1) {
                       return (
-                        <div key={a.id} className={`cal-item cal-shared ${dim ? "dim" : ""}`} style={{ borderLeftColor: a.coach?.color ?? "var(--court-2)" }}>
-                          <div className="mono" style={{ fontWeight: 650 }}>
-                            {formatTime(a.starts_at, tz)}–{formatTime(a.ends_at, tz)}
+                        <div key={a.id} className="cal-shared">
+                          <div className="cal-shared-head">
+                            <Icon name="users" size={12} /> Same time · {group.length} students
                           </div>
-                          <div className="cal-student">{group.map((g) => g.student?.full_name).join(" / ")}</div>
-                          <div className="muted">
-                            {a.coach?.full_name}
-                            {a.court ? ` · ${a.court.name}` : ""}
-                          </div>
-                          <div className="cal-shared-list">
-                            {group.map((g) => (
-                              <Link key={g.id} href={`/appointments/${g.id}`} className="cal-shared-row" title={`Open ${g.student?.full_name}'s booking`}>
-                                <span>{g.student?.full_name?.split(" ")[0]}</span>
-                                <span className={`badge tone-${STATUS_META[g.status].tone}`} style={{ height: 18, fontSize: 10.5, padding: "0 6px" }}>
-                                  {STATUS_META[g.status].label}
-                                </span>
-                              </Link>
-                            ))}
+                          <div className="cal-shared-boxes">
+                            {group.map((g) => {
+                              const gDim = g.status === "cancelled" || g.status === "declined" || g.status === "not_approved";
+                              return (
+                                <Link
+                                  key={g.id}
+                                  href={`/appointments/${g.id}`}
+                                  className={`cal-item ${gDim ? "dim" : ""}`}
+                                  style={{ borderLeftColor: g.coach?.color ?? "var(--court-2)" }}
+                                  title={`${g.student?.full_name} · ${STATUS_META[g.status].label}`}
+                                >
+                                  <div className="mono" style={{ fontWeight: 650 }}>
+                                    {formatTime(g.starts_at, tz)}–{formatTime(g.ends_at, tz)}
+                                  </div>
+                                  <div className="cal-student">{g.student?.full_name}</div>
+                                  <div className="muted">
+                                    {g.coach?.full_name}
+                                    {g.court ? ` · ${g.court.name}` : ""}
+                                  </div>
+                                  <div style={{ marginTop: 4 }}>
+                                    <span className={`badge tone-${STATUS_META[g.status].tone}`} style={{ height: 18, fontSize: 10.5, padding: "0 6px" }}>
+                                      {STATUS_META[g.status].label}
+                                    </span>
+                                  </div>
+                                </Link>
+                              );
+                            })}
                           </div>
                         </div>
                       );
