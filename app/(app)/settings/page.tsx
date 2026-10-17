@@ -8,6 +8,8 @@ import { Card, Flash, PageHeader } from "@/components/ui";
 import { Icon } from "@/components/icons";
 import { SubmitButton } from "@/components/buttons";
 import { addSessionType, updateOrganization, updateSessionType } from "./actions";
+import { updateCourt, updateVenueBasics } from "../venues/actions";
+import { venueColor } from "@/lib/venue-colors";
 
 export const metadata: Metadata = { title: "Settings" };
 
@@ -20,6 +22,12 @@ export default async function SettingsPage({
   const { supabase, org } = await requireSession(["admin"]);
   const { data } = await supabase.from("session_types").select("*").eq("org_id", org.id).order("name");
   const types = (data ?? []) as SessionType[];
+  const [venuesRes, courtsRes] = await Promise.all([
+    supabase.from("venues").select("*").eq("org_id", org.id).order("name"),
+    supabase.from("courts").select("*").eq("org_id", org.id).order("name")
+  ]);
+  const venues = (venuesRes.data ?? []) as { id: string; name: string; color?: string | null; is_active: boolean }[];
+  const courts = (courtsRes.data ?? []) as { id: string; venue_id: string; name: string; alt_name?: string | null; surface: string | null }[];
   const zones = TIMEZONES.includes(org.timezone) ? TIMEZONES : [org.timezone, ...TIMEZONES];
 
   return (
@@ -182,6 +190,66 @@ export default async function SettingsPage({
         </form>
 
         <aside className="stack">
+          <Card
+            title="Venues & courts"
+            actions={
+              <Link className="btn small ghost" href="/venues">
+                More
+              </Link>
+            }
+          >
+            <div className="card-body stack">
+              <span className="small muted">Renaming here updates every booking, student schedule and calendar entry at once.</span>
+              {venues.length === 0 ? <span className="small faint">No venues yet — add one on the Venues & courts page.</span> : null}
+              {venues.map((venue) => {
+                const color = venueColor(venue, venues);
+                const venueCourts = courts.filter((c) => c.venue_id === venue.id);
+                return (
+                  <div key={venue.id} className="settings-venue" style={{ borderLeftColor: color }}>
+                    <form action={updateVenueBasics} className="settings-venue-row">
+                      <input type="hidden" name="id" value={venue.id} />
+                      <input type="hidden" name="return_to" value="/settings" />
+                      <input
+                        className="input settings-color"
+                        type="color"
+                        name="color"
+                        defaultValue={color}
+                        aria-label={`${venue.name} colour`}
+                      />
+                      <input className="input" name="name" defaultValue={venue.name} required aria-label="Venue name" />
+                      <SubmitButton size="small">Save</SubmitButton>
+                    </form>
+                    {venueCourts.length ? (
+                      <details className="disclosure">
+                        <summary className="small muted settings-courts-toggle">
+                          {venueCourts.length} court{venueCourts.length === 1 ? "" : "s"} · edit names
+                        </summary>
+                        <div className="stack tight" style={{ marginTop: 8 }}>
+                          {venueCourts.map((court) => (
+                            <form key={court.id} action={updateCourt} className="settings-court-row">
+                              <input type="hidden" name="id" value={court.id} />
+                              <input type="hidden" name="return_to" value="/settings" />
+                              <input type="hidden" name="surface" value={court.surface ?? ""} />
+                              <input className="input" name="name" defaultValue={court.name} required maxLength={60} aria-label="Court name" />
+                              <input
+                                className="input"
+                                name="alt_name"
+                                defaultValue={court.alt_name ?? ""}
+                                placeholder="Name on office sheet"
+                                maxLength={60}
+                                aria-label="Name on the office sheet"
+                              />
+                              <SubmitButton size="small">Save</SubmitButton>
+                            </form>
+                          ))}
+                        </div>
+                      </details>
+                    ) : null}
+                  </div>
+                );
+              })}
+            </div>
+          </Card>
           <Card title="Session types">
             <div className="list">
               {types.map((type) => (

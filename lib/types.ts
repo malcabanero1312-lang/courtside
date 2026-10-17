@@ -83,6 +83,7 @@ export interface Venue {
   closes_at: string;
   notes: string | null;
   is_active: boolean;
+  color?: string | null;
 }
 
 export interface Court {

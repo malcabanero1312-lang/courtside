@@ -9,9 +9,16 @@ import { Icon } from "@/components/icons";
 import { SubmitButton } from "@/components/buttons";
 import { StudentFields } from "../student-fields";
 import { addRegularSlot, deleteRegularSlot, setStudentArchived, setStudentRegular, updateStudent } from "../actions";
-import { WEEKDAY_NAMES, timeRange12 } from "@/lib/regular";
+import { WEEKDAY_NAMES, monthLabel, timeRange12 } from "@/lib/regular";
+import { venueColor } from "@/lib/venue-colors";
+import { todayInZone } from "@/lib/time";
 
 export const metadata: Metadata = { title: "Student" };
+
+function utcMonth(iso: string, timeZone: string): string {
+  const parts = new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit" }).formatToParts(new Date(iso));
+  return `${parts.find((p) => p.type === "year")?.value}-${parts.find((p) => p.type === "month")?.value}`;
+}
 
 export default async function StudentPage({
   params,
@@ -34,10 +41,25 @@ export default async function StudentPage({
     .order("starts_at", { ascending: false })
     .limit(200);
   const appointments = (apptData ?? []) as unknown as AppointmentWithRelations[];
-  const [slotsRes, coachesRes] = await Promise.all([
+  const [slotsRes, coachesRes, monthlyRes, venuesRes] = await Promise.all([
     supabase.from("regular_slots").select("id, weekday, start_time, end_time, coach_id").eq("student_id", id).order("weekday").order("start_time"),
-    supabase.from("coaches").select("id, full_name").eq("org_id", org.id).eq("is_active", true).order("full_name")
+    supabase.from("coaches").select("id, full_name").eq("org_id", org.id).eq("is_active", true).order("full_name"),
+    supabase
+      .from("monthly_confirmations")
+      .select("id, month, status, entries, requested_entries")
+      .eq("student_id", id)
+      .gte("month", `${todayInZone(org.timezone).slice(0, 7)}-01`)
+      .order("month"),
+    supabase.from("venues").select("*").eq("org_id", org.id).order("name")
   ]);
+  const monthly = (monthlyRes.data ?? []) as {
+    id: string;
+    month: string;
+    status: "sent" | "confirmed" | "change_requested" | "declined";
+    entries: unknown[];
+    requested_entries: unknown[] | null;
+  }[];
+  const allVenues = (venuesRes.data ?? []) as { id: string; name: string; color?: string | null }[];
   const slots = (slotsRes.data ?? []) as { id: string; weekday: number; start_time: string; end_time: string; coach_id: string | null }[];
   const coachOptions = (coachesRes.data ?? []) as { id: string; full_name: string }[];
   const coachName = new Map(coachOptions.map((c) => [c.id, c.full_name]));
@@ -125,9 +147,76 @@ export default async function StudentPage({
 
       <div className="grid main-side">
         <div className="stack">
-          <Card title="Upcoming sessions">
-            {upcoming.length ? list(upcoming) : <EmptyState icon="calendar" title="No upcoming sessions" />}
-          </Card>
+          <section id="schedule" className="card student-schedule">
+            <div className="card-head">
+              <div>
+                <div className="card-title">Schedule</div>
+                <div className="small muted">Every upcoming session, confirmed or still waiting.</div>
+              </div>
+              <div className="row wrap" style={{ gap: 6 }}>
+                <span className="badge plain tone-green">{upcoming.filter((a) => a.status === "confirmed").length} confirmed</span>
+                <span className="badge plain tone-amber">
+                  {upcoming.filter((a) => ["pending_approval", "scheduled", "awaiting_response", "reschedule_requested"].includes(a.status)).length} waiting
+                </span>
+              </div>
+            </div>
+            {monthly.length ? (
+              <div className="card-body row wrap" style={{ gap: 8, paddingTop: 0 }}>
+                {monthly.map((m) => {
+                  const asked = (m.requested_entries ?? m.entries).length;
+                  const label =
+                    m.status === "confirmed"
+                      ? `Confirmed ${m.entries.length}${m.entries.length < asked ? ` of ${asked}` : ""} dates`
+                      : m.status === "sent"
+                        ? "Waiting for their answer"
+                        : m.status === "change_requested"
+                          ? "Asked for a change"
+                          : "Not continuing";
+                  const tone = m.status === "confirmed" ? "green" : m.status === "sent" ? "amber" : m.status === "change_requested" ? "violet" : "muted";
+                  return (
+                    <Link key={m.id} href={`/regulars?month=${m.month.slice(0, 7)}`} className={`badge plain tone-${tone}`}>
+                      {monthLabel(m.month.slice(0, 7))}: {label}
+                    </Link>
+                  );
+                })}
+              </div>
+            ) : null}
+            {upcoming.length ? (
+              <div className="list">
+                {upcoming.map((a, i) => {
+                  const monthKey = utcMonth(a.starts_at, tz);
+                  const showMonth = i === 0 || utcMonth(upcoming[i - 1].starts_at, tz) !== monthKey;
+                  const venue = allVenues.find((v) => v.id === a.venue_id);
+                  return (
+                    <div key={a.id}>
+                      {showMonth ? <div className="schedule-month">{monthLabel(monthKey)}</div> : null}
+                      <Link href={`/appointments/${a.id}`} className="list-item schedule-row">
+                        <div className="schedule-when">
+                          <div style={{ fontWeight: 650 }}>{formatDate(a.starts_at, tz, "short")}</div>
+                          <div className="small muted mono">{formatTimeRange(a.starts_at, a.ends_at, tz)}</div>
+                        </div>
+                        <div className="grow small schedule-where">
+                          <span className="row" style={{ gap: 6 }}>
+                            <CoachDot color={a.coach?.color} /> {a.coach?.full_name}
+                          </span>
+                          {venue ? (
+                            <span className="row muted" style={{ gap: 6 }}>
+                              <span className="venue-dot" style={{ background: venueColor(venue, allVenues) }} />
+                              {venue.name}
+                              {a.court ? ` · ${a.court.name}` : ""}
+                            </span>
+                          ) : null}
+                        </div>
+                        <StatusBadge status={a.status} />
+                      </Link>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <EmptyState icon="calendar" title="No upcoming sessions" />
+            )}
+          </section>
           <Card title="History">{past.length ? list(past) : <div className="card-body muted small">No past sessions yet.</div>}</Card>
         </div>
         <aside className="stack">

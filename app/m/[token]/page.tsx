@@ -12,6 +12,7 @@ interface MonthlyPage {
   found: boolean;
   status?: "sent" | "confirmed" | "change_requested" | "declined";
   entries?: RequestEntry[];
+  requested_entries?: RequestEntry[];
   month?: string;
   student_note?: string | null;
   answered_by?: string | null;
@@ -92,6 +93,8 @@ export default async function MonthlyPortalPage({ params }: { params: Promise<{ 
   const color = /^#[0-9a-fA-F]{6}$/.test(page.brand_color ?? "") ? (page.brand_color as string) : "#12392c";
   const month = monthName(page.month);
   const groups = groupEntries(page.entries ?? []);
+  const confirmedDates = new Set((page.entries ?? []).map((e) => e.date));
+  const skipped = (page.requested_entries ?? []).map((e) => e.date).filter((d) => !confirmedDates.has(d));
   const contactHref =
     page.contact_phone && /^[0-9]{7,15}$/.test(page.contact_phone)
       ? `https://wa.me/${page.contact_phone}?text=${encodeURIComponent(`Hi ${page.org_name ?? ""}, I have a question about my ${month} tennis schedule.`)}`
@@ -107,24 +110,16 @@ export default async function MonthlyPortalPage({ params }: { params: Promise<{ 
         <p style={{ opacity: 0.85, marginTop: 4 }}>Here's your tennis schedule for {month}.</p>
       </div>
       <div className="card-body stack">
-        <div className="stack tight">
-          {groups.map((g) => (
-            <div key={`${g.weekday}-${g.start}`} className="req-group">
-              <strong>{groupHeading(g)}</strong>
-              <span className="muted">{datesLine(g.dates)}</span>
-            </div>
-          ))}
-          <div className="row small" style={{ color: "var(--ink-2)", fontSize: 15, marginTop: 4 }}>
-            <Icon name="whistle" size={16} />
-            {page.coach ? `Coach ${page.coach}` : "Your coach"}
-            {page.venue ? <span className="muted"> · {page.venue}</span> : null}
-          </div>
+        <div className="row small" style={{ color: "var(--ink-2)", fontSize: 15 }}>
+          <Icon name="whistle" size={16} />
+          {page.coach ? `Coach ${page.coach}` : "Your coach"}
+          {page.venue ? <span className="muted"> · {page.venue}</span> : null}
         </div>
 
         <div className="divider" />
 
         {page.status === "sent" ? (
-          <MonthlyForm token={token} monthName={month} contactHref={contactHref} />
+          <MonthlyForm token={token} monthName={month} entries={page.entries ?? []} contactHref={contactHref} />
         ) : (
           <>
             <div className="empty" style={{ padding: "18px 8px" }}>
@@ -135,6 +130,18 @@ export default async function MonthlyPortalPage({ params }: { params: Promise<{ 
               <p>{ANSWERED[page.status]?.body}</p>
               {page.student_note ? <p className="small">Your note: “{page.student_note}”</p> : null}
             </div>
+            {page.status === "confirmed" && groups.length ? (
+              <div className="stack tight">
+                <strong>Confirmed sessions</strong>
+                {groups.map((g) => (
+                  <div key={`${g.weekday}-${g.start}`} className="portal-group">
+                    <div className="portal-group-head">{groupHeading(g)}</div>
+                    <span className="muted small">{datesLine(g.dates)}</span>
+                  </div>
+                ))}
+                {skipped.length ? <span className="small muted">Skipped: {datesLine(skipped)}</span> : null}
+              </div>
+            ) : null}
             <div className="notice info" style={{ margin: 0 }}>
               <Icon name="info" size={17} />
               <div>

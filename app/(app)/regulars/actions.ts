@@ -11,7 +11,7 @@ const MONTH = /^\d{4}-\d{2}$/;
 const TIME = /^\d{2}:\d{2}$/;
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 const TOKEN = /^[A-Za-z0-9_-]{24,128}$/;
-const NEEDS_UPDATE = "The database needs update 0011. In Supabase → SQL Editor, run supabase/migrations/0011_monthly_confirmations.sql.";
+const NEEDS_UPDATE = "The database needs an update. In Supabase → SQL Editor, run the migration files up to 0012_monthly_dates_and_venue_colors.sql.";
 
 export interface ActionResult {
   ok: boolean;
@@ -54,6 +54,7 @@ export async function sendMonthly(input: SendMonthlyInput): Promise<ActionResult
       .from("monthly_confirmations")
       .update({
         entries,
+        requested_entries: entries,
         venue_id: input.venueId,
         status: "sent",
         student_note: null,
@@ -66,7 +67,7 @@ export async function sendMonthly(input: SendMonthlyInput): Promise<ActionResult
       .eq("id", existing.id);
     if (error) {
       logError("monthly-update", error);
-      return { ok: false, error: "Couldn't save. Try again." };
+      return { ok: false, error: ["PGRST204", "42703"].includes(error.code ?? "") ? NEEDS_UPDATE : "Couldn't save. Try again." };
     }
     revalidatePath("/regulars");
     return { ok: true, token: existing.token as string };
@@ -81,13 +82,14 @@ export async function sendMonthly(input: SendMonthlyInput): Promise<ActionResult
     month: monthDate,
     token: input.token,
     entries,
+    requested_entries: entries,
     status: "sent",
     assigned_agent_id: membership.id,
     created_by: user.id
   });
   if (error) {
     logError("monthly-insert", error);
-    return { ok: false, error: error.code === "42P01" ? NEEDS_UPDATE : "Couldn't save. Try again." };
+    return { ok: false, error: ["42P01", "PGRST204", "42703"].includes(error.code ?? "") ? NEEDS_UPDATE : "Couldn't save. Try again." };
   }
   revalidatePath("/regulars");
   return { ok: true, token: input.token };

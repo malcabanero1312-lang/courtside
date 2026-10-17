@@ -10,8 +10,9 @@ function text(formData: FormData, key: string): string {
   return String(formData.get(key) ?? "").trim();
 }
 
-function back(kind: "notice" | "error", message: string): never {
-  redirect(`/venues?${kind}=${encodeURIComponent(message)}`);
+function back(kind: "notice" | "error", message: string, returnTo = "/venues"): never {
+  const path = returnTo.startsWith("/") ? returnTo : "/venues";
+  redirect(`${path}${path.includes("?") ? "&" : "?"}${kind}=${encodeURIComponent(message)}`);
 }
 
 function readVenue(formData: FormData) {
@@ -25,7 +26,8 @@ function readVenue(formData: FormData) {
       maps_url: maps && /^https?:\/\//.test(maps) ? maps : null,
       opens_at: opens,
       closes_at: closes,
-      notes: text(formData, "notes") || null
+      notes: text(formData, "notes") || null,
+      ...(formData.has("color") ? { color: /^#[0-9a-fA-F]{6}$/.test(text(formData, "color")) ? text(formData, "color") : null } : {})
     },
     error: !text(formData, "name")
       ? "Enter the venue name."
@@ -80,18 +82,39 @@ export async function addCourt(formData: FormData) {
   back("notice", "Court added.");
 }
 
+export async function updateVenueBasics(formData: FormData) {
+  const { supabase } = await requireSession(["admin"]);
+  const returnTo = text(formData, "return_to") || "/venues";
+  const name = text(formData, "name");
+  if (!name) back("error", "Enter the venue name.", returnTo);
+  const color = text(formData, "color");
+  const { error } = await supabase
+    .from("venues")
+    .update({ name, color: /^#[0-9a-fA-F]{6}$/.test(color) ? color : null })
+    .eq("id", text(formData, "id"));
+  if (error) back("error", friendlyError(error), returnTo);
+  revalidatePath("/venues");
+  revalidatePath("/settings");
+  revalidatePath("/regulars");
+  revalidatePath("/calendar");
+  back("notice", "Venue saved. Every booking at this venue now shows the new name.", returnTo);
+}
+
 export async function updateCourt(formData: FormData) {
   const { supabase } = await requireSession(["admin"]);
+  const returnTo = text(formData, "return_to") || "/venues";
   const name = text(formData, "name");
-  if (!name) back("error", "Enter a court name.");
+  if (!name) back("error", "Enter a court name.", returnTo);
   const altName = text(formData, "alt_name").slice(0, 60) || null;
   const { error } = await supabase
     .from("courts")
     .update({ name, alt_name: altName, surface: text(formData, "surface") || null })
     .eq("id", text(formData, "id"));
-  if (error) back("error", error.code === "23505" ? "That venue already has a court with this name." : friendlyError(error));
+  if (error) back("error", error.code === "23505" ? "That venue already has a court with this name." : friendlyError(error), returnTo);
   revalidatePath("/venues");
-  back("notice", "Court saved.");
+  revalidatePath("/settings");
+  revalidatePath("/calendar");
+  back("notice", "Court saved. Every booking on this court now shows the new name.", returnTo);
 }
 
 export async function toggleCourt(formData: FormData) {

@@ -44,15 +44,20 @@ export default async function StudentsPage({
   const { data: upcoming } = students.length
     ? await supabase
         .from("appointments")
-        .select("student_id, starts_at")
+        .select("student_id, starts_at, status")
         .in("student_id", students.map((s) => s.id))
         .gte("starts_at", new Date().toISOString())
         .in("status", ["scheduled", "awaiting_response", "pending_approval", "confirmed", "reschedule_requested"])
         .order("starts_at")
     : { data: [] };
   const nextByStudent = new Map<string, string>();
-  for (const row of (upcoming ?? []) as { student_id: string; starts_at: string }[]) {
+  const upcomingCount = new Map<string, { confirmed: number; waiting: number }>();
+  for (const row of (upcoming ?? []) as { student_id: string; starts_at: string; status: string }[]) {
     if (!nextByStudent.has(row.student_id)) nextByStudent.set(row.student_id, row.starts_at);
+    const c = upcomingCount.get(row.student_id) ?? { confirmed: 0, waiting: 0 };
+    if (row.status === "confirmed") c.confirmed += 1;
+    else c.waiting += 1;
+    upcomingCount.set(row.student_id, c);
   }
 
   return (
@@ -124,7 +129,23 @@ export default async function StudentsPage({
                       </td>
                       <td className="hide-mobile cell-sub">{s.level ?? "—"}</td>
                       <td className="cell-sub nowrap">
-                        {nextByStudent.get(s.id) ? formatDate(nextByStudent.get(s.id) as string, org.timezone, "short") : "—"}
+                        <div className="next-cell">
+                          <span>{nextByStudent.get(s.id) ? formatDate(nextByStudent.get(s.id) as string, org.timezone, "short") : "—"}</span>
+                          <Link
+                            href={`/students/${s.id}#schedule`}
+                            className="schedule-pill"
+                            title={`${upcomingCount.get(s.id)?.confirmed ?? 0} confirmed · ${upcomingCount.get(s.id)?.waiting ?? 0} waiting`}
+                            aria-label={`Open ${s.full_name}'s schedule`}
+                          >
+                            <Icon name="calendar" size={13} />
+                            {upcomingCount.get(s.id) ? (
+                              <>
+                                <span className="schedule-pill-ok">{upcomingCount.get(s.id)?.confirmed ?? 0}</span>
+                                {upcomingCount.get(s.id)?.waiting ? <span className="schedule-pill-wait">{upcomingCount.get(s.id)?.waiting}</span> : null}
+                              </>
+                            ) : null}
+                          </Link>
+                        </div>
                       </td>
                     </tr>
                   ))}

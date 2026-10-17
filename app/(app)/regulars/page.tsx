@@ -5,7 +5,8 @@ import { todayInZone } from "@/lib/time";
 import { monthLabel, shiftMonth, type RequestEntry } from "@/lib/regular";
 import { ButtonLink, EmptyState, Flash, PageHeader } from "@/components/ui";
 import { SubmitButton } from "@/components/buttons";
-import { MonthlySchedules, type MonthlyRecord, type MonthlySlot, type MonthlyStudent } from "@/components/monthly-schedules";
+import { MonthlySchedules, type MonthlyRecord, type MonthlySlot, type MonthlyStudent, type MonthlyVenue } from "@/components/monthly-schedules";
+import { venueColor } from "@/lib/venue-colors";
 import { detectWeeklySchedules } from "./actions";
 
 export const metadata: Metadata = { title: "Monthly schedules" };
@@ -26,9 +27,9 @@ export default async function RegularsPage({
   const requested = one(params.month);
   const month = /^\d{4}-\d{2}$/.test(requested) ? requested : shiftMonth(thisMonth, 1);
 
-  const [coachesRes, venuesRes, studentsRes, slotsRes] = await Promise.all([
+  const [coachesRes, venuesRes, studentsRes, slotsRes, lastVenueRes] = await Promise.all([
     supabase.from("coaches").select("id, full_name").eq("org_id", org.id).eq("is_active", true).order("full_name"),
-    supabase.from("venues").select("id, name").eq("org_id", org.id).eq("is_active", true).order("name"),
+    supabase.from("venues").select("*").eq("org_id", org.id).order("name"),
     supabase
       .from("students")
       .select("id, full_name, phone")
@@ -37,12 +38,34 @@ export default async function RegularsPage({
       .eq("is_archived", false)
       .order("full_name")
       .limit(2000),
-    supabase.from("regular_slots").select("id, student_id, coach_id, weekday, start_time, end_time").eq("org_id", org.id).limit(5000)
+    supabase.from("regular_slots").select("id, student_id, coach_id, venue_id, weekday, start_time, end_time").eq("org_id", org.id).limit(5000),
+    supabase
+      .from("appointments")
+      .select("student_id, venue_id")
+      .eq("org_id", org.id)
+      .not("status", "in", "(cancelled,declined,rescheduled)")
+      .order("starts_at", { ascending: false })
+      .limit(5000)
   ]);
 
   const coaches = (coachesRes.data ?? []) as { id: string; full_name: string }[];
-  const venues = (venuesRes.data ?? []) as { id: string; name: string }[];
-  const rawSlots = (slotsRes.data ?? []) as { id: string; student_id: string; coach_id: string | null; weekday: number; start_time: string; end_time: string }[];
+  const allVenues = (venuesRes.data ?? []) as { id: string; name: string; color?: string | null; is_active: boolean }[];
+  const venues: MonthlyVenue[] = allVenues
+    .filter((v) => v.is_active)
+    .map((v) => ({ id: v.id, name: v.name, color: venueColor(v, allVenues) }));
+  const rawSlots = (slotsRes.data ?? []) as {
+    id: string;
+    student_id: string;
+    coach_id: string | null;
+    venue_id: string | null;
+    weekday: number;
+    start_time: string;
+    end_time: string;
+  }[];
+  const lastVenue = new Map<string, string>();
+  for (const a of (lastVenueRes.data ?? []) as { student_id: string; venue_id: string }[]) {
+    if (!lastVenue.has(a.student_id)) lastVenue.set(a.student_id, a.venue_id);
+  }
   const slotCoaches = Array.from(new Set(rawSlots.map((s) => s.coach_id).filter(Boolean))) as string[];
   const requestedCoach = one(params.coach);
   const coachId =
@@ -50,12 +73,12 @@ export default async function RegularsPage({
       ? requestedCoach
       : coaches.find((c) => slotCoaches.includes(c.id))?.id ?? coaches[0]?.id ?? "";
 
-  let records: MonthlyRecord[] = [];
+  let records: (MonthlyRecord & { venueId: string | null })[] = [];
   let needsUpdate = Boolean(slotsRes.error || studentsRes.error);
   if (!needsUpdate) {
     let query = supabase
       .from("monthly_confirmations")
-      .select("id, student_id, status, entries, student_note, token, answered_by, sent_at, office_sent_at")
+      .select("id, student_id, venue_id, status, entries, requested_entries, student_note, token, answered_by, sent_at, office_sent_at")
       .eq("org_id", org.id)
       .eq("month", `${month}-01`);
     query = coachId ? query.eq("coach_id", coachId) : query.is("coach_id", null);
@@ -64,8 +87,10 @@ export default async function RegularsPage({
     records = ((data ?? []) as {
       id: string;
       student_id: string;
+      venue_id: string | null;
       status: MonthlyRecord["status"];
       entries: RequestEntry[];
+      requested_entries: RequestEntry[] | null;
       student_note: string | null;
       token: string;
       answered_by: string | null;
@@ -76,6 +101,8 @@ export default async function RegularsPage({
       studentId: r.student_id,
       status: r.status,
       entries: r.entries ?? [],
+      requestedEntries: r.requested_entries ?? null,
+      venueId: r.venue_id,
       note: r.student_note,
       token: r.token,
       answeredBy: r.answered_by,
@@ -90,7 +117,12 @@ export default async function RegularsPage({
   const regulars = (studentsRes.data ?? []) as { id: string; full_name: string; phone: string | null }[];
   const students: MonthlyStudent[] = regulars
     .filter((s) => slots.some((slot) => slot.studentId === s.id) || records.some((r) => r.studentId === s.id))
-    .map((s) => ({ id: s.id, name: s.full_name, phone: s.phone }));
+    .map((s) => {
+      const fromRecord = records.find((r) => r.studentId === s.id)?.venueId ?? null;
+      const fromSlot = rawSlots.find((slot) => slot.student_id === s.id && slot.venue_id)?.venue_id ?? null;
+      const candidate = fromRecord ?? fromSlot ?? lastVenue.get(s.id) ?? null;
+      return { id: s.id, name: s.full_name, phone: s.phone, venueId: candidate && venues.some((v) => v.id === candidate) ? candidate : null };
+    });
   const withoutSchedule = regulars.filter((s) => !rawSlots.some((slot) => slot.student_id === s.id));
 
   const monthOptions = Array.from({ length: 4 }, (_, i) => shiftMonth(thisMonth, i));
@@ -129,7 +161,7 @@ export default async function RegularsPage({
           <EmptyState
             icon="alert"
             title="One-time database update needed"
-            body="In Supabase → SQL Editor, run the migration files you haven't run yet, up to 0011_monthly_confirmations.sql, then reload this page."
+            body="In Supabase → SQL Editor, run the migration files you haven't run yet, up to 0012_monthly_dates_and_venue_colors.sql, then reload this page."
           />
         </div>
       ) : (

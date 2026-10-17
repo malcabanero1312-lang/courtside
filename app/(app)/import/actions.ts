@@ -118,7 +118,7 @@ export async function importSheetSessions(input: ImportInput): Promise<ImportRes
     supabase.from("appointments").select("office_approved, import_batch, share_group, monthly_id").limit(1),
     supabase.from("students").select("is_regular").limit(1),
     supabase.from("courts").select("alt_name").limit(1),
-    supabase.from("regular_slots").select("id").limit(1)
+    supabase.from("regular_slots").select("id, venue_id").limit(1)
   ]);
   const schemaError = apptCheck.error ?? studentCheck.error ?? courtCheck.error ?? slotCheck.error;
   if (schemaError) {
@@ -126,7 +126,7 @@ export async function importSheetSessions(input: ImportInput): Promise<ImportRes
     return {
       ...empty,
       error:
-        "The database needs a one-time update before importing. In Supabase → SQL Editor, run the files in supabase/migrations that you haven't run yet (up to 0011), in order, then try again."
+        "The database needs a one-time update before importing. In Supabase → SQL Editor, run the files in supabase/migrations that you haven't run yet (up to 0012), in order, then try again."
     };
   }
 
@@ -340,11 +340,27 @@ export async function importSheetSessions(input: ImportInput): Promise<ImportRes
   if (touched.size) {
     const byStudent = new Map<string, { weekday: number; start: string; end: string; n: number }[]>();
     for (const p of patterns.values()) byStudent.set(p.studentId, [...(byStudent.get(p.studentId) ?? []), p]);
-    const slots: { org_id: string; student_id: string; coach_id: string; weekday: number; start_time: string; end_time: string }[] = [];
+    const slots: {
+      org_id: string;
+      student_id: string;
+      coach_id: string;
+      venue_id: string;
+      weekday: number;
+      start_time: string;
+      end_time: string;
+    }[] = [];
     for (const [studentId, list] of byStudent) {
       const repeating = list.filter((p) => p.n >= 2);
       for (const p of repeating.length ? repeating : list) {
-        slots.push({ org_id: org.id, student_id: studentId, coach_id: coach.id, weekday: p.weekday, start_time: p.start, end_time: p.end });
+        slots.push({
+          org_id: org.id,
+          student_id: studentId,
+          coach_id: coach.id,
+          venue_id: venue.id,
+          weekday: p.weekday,
+          start_time: p.start,
+          end_time: p.end
+        });
       }
     }
     const ids = Array.from(byStudent.keys());

@@ -47,6 +47,7 @@ Wait until it finishes. A few "warn" lines are normal.
 12. And then `supabase/migrations/0009_shared_lessons.sql` (two students sharing one lesson, e.g. “Lam / Kristen”).
 13. And then `supabase/migrations/0010_regular_schedules.sql` (weekly schedules for regular students and the monthly office request).
 14. And then `supabase/migrations/0011_monthly_confirmations.sql` (monthly confirmation links for regular students).
+15. And then `supabase/migrations/0012_monthly_dates_and_venue_colors.sql` (students can confirm only some dates; venue colours).
 
 > Run them in that order, once. If you see an error, read the first red line — it usually says what's wrong. Running a file twice will show "already exists" errors; that's harmless.
 

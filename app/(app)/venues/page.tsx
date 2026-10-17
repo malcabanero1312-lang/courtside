@@ -7,6 +7,7 @@ import { Card, EmptyState, Flash, Fold, PageHeader } from "@/components/ui";
 import { SubmitButton } from "@/components/buttons";
 import { addClosure, addCourt, createVenue, toggleCourt, updateCourt, updateVenue } from "./actions";
 import { deleteBlockedTime } from "../coaches/actions";
+import { venueColor } from "@/lib/venue-colors";
 
 export const metadata: Metadata = { title: "Venues & courts" };
 
@@ -28,6 +29,10 @@ function VenueFields({ venue }: { venue?: Venue }) {
       <label className="field">
         <span>Closes</span>
         <input className="input" type="time" name="closes_at" defaultValue={venue?.closes_at?.slice(0, 5) ?? "22:00"} />
+      </label>
+      <label className="field">
+        <span>Colour</span>
+        <input className="input" type="color" name="color" defaultValue={venue?.color ?? "#2f7d5b"} style={{ padding: 4, height: 40 }} />
       </label>
       <label className="field span-2">
         <span>Google Maps link (optional)</span>
@@ -82,6 +87,7 @@ export default async function VenuesPage({
                 key={venue.id}
                 title={
                   <span className="row">
+                    <span className="venue-dot" style={{ background: venueColor(venue, venues) }} aria-hidden />
                     {venue.name}
                     {!venue.is_active ? <span className="badge plain tone-muted">Inactive</span> : null}
                   </span>
