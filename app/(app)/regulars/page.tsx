@@ -25,7 +25,8 @@ export default async function RegularsPage({
   const today = todayInZone(org.timezone);
   const thisMonth = today.slice(0, 7);
   const requested = one(params.month);
-  const month = /^\d{4}-\d{2}$/.test(requested) ? requested : shiftMonth(thisMonth, 1);
+  const monthOptions = Array.from({ length: 4 }, (_, i) => shiftMonth(thisMonth, i));
+  const month = monthOptions.includes(requested) ? requested : shiftMonth(thisMonth, 1);
 
   const [coachesRes, venuesRes, studentsRes, slotsRes, lastVenueRes] = await Promise.all([
     supabase.from("coaches").select("id, full_name").eq("org_id", org.id).eq("is_active", true).order("full_name"),
@@ -125,7 +126,6 @@ export default async function RegularsPage({
     });
   const withoutSchedule = regulars.filter((s) => !rawSlots.some((slot) => slot.student_id === s.id));
 
-  const monthOptions = Array.from({ length: 4 }, (_, i) => shiftMonth(thisMonth, i));
   const link = (m: string, c: string) => `/regulars?month=${m}${c ? `&coach=${c}` : ""}`;
 
   return (
@@ -139,9 +139,10 @@ export default async function RegularsPage({
 
       <section className="card card-pad stack" style={{ marginBottom: 16 }}>
         <div className="row wrap" style={{ gap: 8 }}>
-          {monthOptions.map((m) => (
-            <Link key={m} href={link(m, coachId)} className={`btn small ${m === month ? "primary" : "ghost"}`}>
+          {monthOptions.map((m, i) => (
+            <Link key={m} href={link(m, coachId)} className={`btn small month-chip ${m === month ? "primary" : "ghost"}`}>
               {monthLabel(m)}
+              {i === 0 ? <span className="month-chip-tag">This month</span> : i === 1 ? <span className="month-chip-tag">Next</span> : null}
             </Link>
           ))}
         </div>
