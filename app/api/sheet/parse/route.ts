@@ -19,7 +19,7 @@ async function extractItems(data: Uint8Array): Promise<SheetTextItem[]> {
   const worker = await import("pdfjs-dist/legacy/build/pdf.worker.mjs");
   (globalThis as unknown as { pdfjsWorker: unknown }).pdfjsWorker = worker;
   const { getDocument } = await import("pdfjs-dist/legacy/build/pdf.mjs");
-  const task = getDocument({ data, useSystemFonts: true, isEvalSupported: false, disableFontFace: true });
+  const task = getDocument({ data, useSystemFonts: true, disableFontFace: true });
   const doc = await task.promise;
   const items: SheetTextItem[] = [];
   try {
