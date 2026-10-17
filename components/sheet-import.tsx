@@ -7,6 +7,27 @@ import { importSheetSessions, type ImportResult } from "@/app/(app)/import/actio
 import { parseCourtSheet } from "@/lib/court-sheet";
 import { readPdfTextInBrowser } from "@/lib/pdf-browser";
 import { splitSharedNames } from "@/lib/shared-lessons";
+import { buildMissingMessage, namesMatch, time12 } from "@/lib/regular";
+import { openWhatsApp } from "@/lib/whatsapp";
+
+export interface RequestedItem {
+  id: string;
+  studentId: string;
+  studentName: string;
+  phone: string | null;
+  coachId: string | null;
+  date: string;
+  start: string;
+  end: string;
+}
+
+interface RowMatch {
+  name: string;
+  itemId: string;
+  studentId: string;
+  same: boolean;
+  requested: string;
+}
 
 interface SheetSession {
   date: string;
@@ -66,7 +87,8 @@ export function SheetImport({
   courts,
   studentNames,
   defaultDaysBefore,
-  today
+  today,
+  requested = []
 }: {
   coaches: { id: string; full_name: string }[];
   venues: { id: string; name: string }[];
@@ -74,6 +96,7 @@ export function SheetImport({
   studentNames: string[];
   defaultDaysBefore: number;
   today: string;
+  requested?: RequestedItem[];
 }) {
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -95,6 +118,52 @@ export function SheetImport({
     }
     return map;
   }, [courts, venueId]);
+
+  const relevantRequests = useMemo(
+    () => (sheet ? requested.filter((r) => (!r.coachId || r.coachId === coachId) && sheet.days.includes(r.date)) : []),
+    [requested, sheet, coachId]
+  );
+
+  const matchesByRow = useMemo(() => {
+    const claimed = new Set<string>();
+    const map = new Map<string, RowMatch[]>();
+    const hh = (n: number) => `${String(n % 24).padStart(2, "0")}:00`;
+    const ordered = [...rows].sort((a, b) => Number(b.include) - Number(a.include));
+    for (const row of ordered) {
+      const names = splitSharedNames(row.name);
+      const list: RowMatch[] = [];
+      for (const name of names.length ? names : [row.name]) {
+        const candidates = relevantRequests.filter((r) => r.date === row.date && !claimed.has(r.id) && namesMatch(name, r.studentName));
+        const item = candidates.find((r) => r.start === hh(row.startHour)) ?? candidates[0];
+        if (!item) continue;
+        claimed.add(item.id);
+        list.push({
+          name,
+          itemId: item.id,
+          studentId: item.studentId,
+          same: item.start === hh(row.startHour) && item.end === hh(row.endHour),
+          requested: `${time12(item.start)} – ${time12(item.end)}`
+        });
+      }
+      if (list.length) map.set(row.key, list);
+    }
+    return map;
+  }, [rows, relevantRequests]);
+
+  const missingRequests = useMemo(() => {
+    const claimed = new Set<string>();
+    for (const row of rows) {
+      if (!row.include) continue;
+      (matchesByRow.get(row.key) ?? []).forEach((m) => claimed.add(m.itemId));
+    }
+    return relevantRequests.filter((r) => !claimed.has(r.id));
+  }, [rows, matchesByRow, relevantRequests]);
+
+  const missingByStudent = useMemo(() => {
+    const map = new Map<string, RequestedItem[]>();
+    missingRequests.forEach((r) => map.set(r.studentId, [...(map.get(r.studentId) ?? []), r]));
+    return Array.from(map.values());
+  }, [missingRequests]);
 
   const known = useMemo(() => new Set(studentNames.map((n) => n.trim().toLowerCase())), [studentNames]);
 
@@ -213,8 +282,10 @@ export function SheetImport({
           endHour: r.endHour,
           court: r.court,
           student: r.name,
-          regular: r.regular
-        }))
+          regular: r.regular,
+          matches: (matchesByRow.get(r.key) ?? []).map((m) => ({ name: m.name, itemId: m.itemId, studentId: m.studentId, same: m.same }))
+        })),
+        missingItemIds: missingRequests.map((m) => m.id)
       });
       if (!res.ok) {
         setError(res.error ?? "Import failed.");
@@ -253,6 +324,16 @@ export function SheetImport({
           ) : null}
           {result.newCourts ? <li>{result.newCourts} court{result.newCourts === 1 ? "" : "s"} added to the venue.</li> : null}
         </ul>
+        {result.matched || result.timeChanged || result.missing ? (
+          <div className="notice info" style={{ margin: 0 }}>
+            <Icon name="info" size={17} />
+            <div>
+              <strong>Compared with your request:</strong> {result.matched} as requested (confirmed — no message needed)
+              {result.timeChanged ? `, ${result.timeChanged} with a different time (in To do now, tell the student)` : ""}
+              {result.missing ? `, ${result.missing} not on the sheet` : ""}.
+            </div>
+          </div>
+        ) : null}
         {result.problems.length ? (
           <div className="notice warn" style={{ margin: 0 }}>
             <Icon name="alert" size={17} />
@@ -391,6 +472,47 @@ export function SheetImport({
         </section>
       ) : null}
 
+      {sheet && relevantRequests.length ? (
+        <section className="card card-pad stack">
+          <div className="card-title">Compared with your office request</div>
+          <div className="row wrap" style={{ gap: 8 }}>
+            <span className="badge plain tone-green">
+              ✓ {Array.from(matchesByRow.values()).flat().filter((m) => m.same).length} as requested
+            </span>
+            <span className="badge plain tone-amber">{Array.from(matchesByRow.values()).flat().filter((m) => !m.same).length} time changed</span>
+            <span className="badge plain tone-red">{missingRequests.length} not on the sheet</span>
+          </div>
+          <p className="small muted" style={{ margin: 0 }}>
+            As requested → saved as confirmed, no need to message the student. Time changed → goes to To do now so you can tell the student.
+            Not on the sheet → tell the student below.
+          </p>
+          {missingByStudent.length ? (
+            <div className="list" style={{ border: "1px solid var(--line)", borderRadius: 10 }}>
+              {missingByStudent.map((items) => {
+                const first = items[0];
+                const message = buildMissingMessage(
+                  first.studentName.split(" ")[0],
+                  items.map((i) => ({ date: i.date, start: i.start, end: i.end }))
+                );
+                return (
+                  <div key={first.studentId} className="list-item" style={{ flexWrap: "wrap" }}>
+                    <div className="grow">
+                      <strong>{first.studentName}</strong>
+                      <div className="small muted">
+                        {items.map((i) => `${dayLabel(i.date)} ${time12(i.start)}`).join(" · ")}
+                      </div>
+                    </div>
+                    <button type="button" className="btn small whatsapp" onClick={() => openWhatsApp(first.phone, message)}>
+                      <Icon name="whatsapp" size={15} /> Tell student
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          ) : null}
+        </section>
+      ) : null}
+
       {sheet && rows.length ? (
         <section className="card">
           <div className="card-head">
@@ -459,6 +581,17 @@ export function SheetImport({
                     </button>
                     {row.past ? <span className="badge plain tone-muted">Past</span> : null}
                     {row.group ? <span className="badge plain tone-violet">Group class</span> : null}
+                    {(matchesByRow.get(row.key) ?? []).map((m) =>
+                      m.same ? (
+                        <span key={m.itemId} className="badge plain tone-green" title="Same as your request — no need to message the student">
+                          ✓ {names.length > 1 ? `${m.name.split(" ")[0]}: ` : ""}As requested
+                        </span>
+                      ) : (
+                        <span key={m.itemId} className="badge plain tone-amber" title="The office gave a different time — the student will be asked to confirm">
+                          {names.length > 1 ? `${m.name.split(" ")[0]}: ` : ""}Time changed · asked {m.requested}
+                        </span>
+                      )
+                    )}
                     {names.length > 1 ? <span className="badge plain tone-slate">Shared · {names.length} students</span> : null}
                     {row.name.trim() ? (
                       <span className={`badge plain ${isNew ? "tone-ball" : "tone-green"}`}>

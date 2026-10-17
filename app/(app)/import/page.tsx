@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { requireSession } from "@/lib/session";
-import { todayInZone } from "@/lib/time";
+import { addDays, todayInZone } from "@/lib/time";
+import type { RequestedItem } from "@/components/sheet-import";
 import { ButtonLink, EmptyState, PageHeader } from "@/components/ui";
 import { SheetImport } from "@/components/sheet-import";
 
@@ -20,6 +21,35 @@ export default async function ImportPage() {
     venueId: c.venue_id,
     name: c.name,
     altName: c.alt_name ?? null
+  }));
+  const today = todayInZone(org.timezone);
+  const { data: requestRows } = await supabase
+    .from("office_request_items")
+    .select("id, student_id, coach_id, date, start_time, end_time, student:students(full_name, phone)")
+    .eq("org_id", org.id)
+    .eq("result", "pending")
+    .gte("date", addDays(today, -62))
+    .order("date")
+    .limit(3000);
+  const requested: RequestedItem[] = (
+    (requestRows ?? []) as unknown as {
+      id: string;
+      student_id: string;
+      coach_id: string | null;
+      date: string;
+      start_time: string;
+      end_time: string;
+      student: { full_name: string; phone: string | null } | null;
+    }[]
+  ).map((r) => ({
+    id: r.id,
+    studentId: r.student_id,
+    studentName: r.student?.full_name ?? "",
+    phone: r.student?.phone ?? null,
+    coachId: r.coach_id,
+    date: r.date,
+    start: r.start_time.slice(0, 5),
+    end: r.end_time.slice(0, 5)
   }));
   const studentNames = ((studentsRes.data ?? []) as { full_name: string }[]).map((s) => s.full_name);
 
@@ -55,7 +85,8 @@ export default async function ImportPage() {
           courts={courts}
           studentNames={studentNames}
           defaultDaysBefore={org.confirm_days_before ?? 2}
-          today={todayInZone(org.timezone)}
+          today={today}
+          requested={requested}
         />
       )}
     </>

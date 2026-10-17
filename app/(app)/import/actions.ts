@@ -14,6 +14,7 @@ export interface ImportRow {
   court: string;
   student: string;
   regular?: boolean;
+  matches?: { name: string; itemId: string; studentId: string; same: boolean }[];
 }
 
 export interface ImportInput {
@@ -21,6 +22,7 @@ export interface ImportInput {
   venueId: string;
   daysBefore: number;
   rows: ImportRow[];
+  missingItemIds?: string[];
 }
 
 export interface ImportProblem {
@@ -38,6 +40,9 @@ export interface ImportResult {
   newStudents: number;
   newCourts: number;
   sharedLessons: number;
+  matched: number;
+  timeChanged: number;
+  missing: number;
   problems: ImportProblem[];
 }
 
@@ -59,7 +64,7 @@ function hourLabel(hour: number): string {
 }
 
 export async function importSheetSessions(input: ImportInput): Promise<ImportResult> {
-  const empty: ImportResult = { ok: false, created: 0, alreadyThere: 0, newStudents: 0, newCourts: 0, sharedLessons: 0, problems: [] };
+  const empty: ImportResult = { ok: false, created: 0, alreadyThere: 0, newStudents: 0, newCourts: 0, sharedLessons: 0, matched: 0, timeChanged: 0, missing: 0, problems: [] };
   const { supabase, org, user, membership } = await requireSession(["admin", "agent"]);
 
   const rows = (Array.isArray(input.rows) ? input.rows : [])
@@ -184,9 +189,15 @@ export async function importSheetSessions(input: ImportInput): Promise<ImportRes
     const rawNames = splitSharedNames(row.student);
     const names = (rawNames.length ? rawNames : [row.student.trim()]).slice(0, 6);
 
-    const ids: { id: string; name: string }[] = [];
+    const matchList = Array.isArray(row.matches) ? row.matches : [];
+    const ids: { id: string; name: string; match?: { itemId: string; same: boolean } }[] = [];
     for (const raw of names) {
       const name = tidyName(raw);
+      const match = matchList.find((m) => m.name.trim().toLowerCase() === raw.trim().toLowerCase());
+      if (match && match.studentId) {
+        ids.push({ id: match.studentId, name, match: { itemId: match.itemId, same: Boolean(match.same) } });
+        continue;
+      }
       const id = await findOrCreateStudent(name, raw, regular);
       if (!id) {
         result.problems.push({ date: row.date, time, student: name, reason: "Couldn't create the student." });
@@ -197,6 +208,13 @@ export async function importSheetSessions(input: ImportInput): Promise<ImportRes
     if (!ids.length) continue;
 
     const already = taken.get(startsAt.getTime()) ?? [];
+    for (const s of ids) {
+      if (s.match && already.some((a) => a.studentId === s.id)) {
+        await supabase.from("office_request_items").update({ result: s.match.same ? "matched" : "changed", updated_at: new Date().toISOString() }).eq("id", s.match.itemId);
+        if (s.match.same) result.matched += 1;
+        else result.timeChanged += 1;
+      }
+    }
     const missing = ids.filter((s) => !already.some((a) => a.studentId === s.id));
     if (!missing.length) {
       result.alreadyThere += 1;
@@ -221,7 +239,13 @@ export async function importSheetSessions(input: ImportInput): Promise<ImportRes
     let createdHere = 0;
 
     for (const student of missing) {
-      const { error } = await supabase.from("appointments").insert({
+      const same = student.match?.same === true;
+      const changed = student.match ? !student.match.same : false;
+      const noteParts = [
+        courts.has(courtKey(row.court)) ? null : `Court on the office sheet: ${row.court}`,
+        changed ? "The office gave a different time from the one requested — tell the student." : null
+      ].filter(Boolean);
+      const { data: inserted, error } = await supabase.from("appointments").insert({
         org_id: org.id,
         reference: "",
         student_id: student.id,
@@ -232,12 +256,14 @@ export async function importSheetSessions(input: ImportInput): Promise<ImportRes
         ends_at: endsAt.toISOString(),
         assigned_agent_id: membership.id,
         office_approved: true,
-        message_due_at: dueAt.toISOString(),
+        status: same ? "confirmed" : "scheduled",
+        student_informed_at: same ? new Date().toISOString() : null,
+        message_due_at: same ? null : (changed ? new Date() : dueAt).toISOString(),
         import_batch: batch,
         share_group: shareGroup,
-        notes: courts.has(courtKey(row.court)) ? null : `Court on the office sheet: ${row.court}`,
+        notes: noteParts.length ? noteParts.join("\n") : null,
         created_by: user.id
-      });
+      }).select("id").single();
       if (error) {
         result.problems.push({
           date: row.date,
@@ -253,11 +279,31 @@ export async function importSheetSessions(input: ImportInput): Promise<ImportRes
       }
       taken.set(startsAt.getTime(), [...(taken.get(startsAt.getTime()) ?? []), { studentId: student.id, shareGroup }]);
       result.created += 1;
+      if (student.match) {
+        await supabase
+          .from("office_request_items")
+          .update({ result: same ? "matched" : "changed", appointment_id: inserted?.id ?? null, updated_at: new Date().toISOString() })
+          .eq("id", student.match.itemId);
+        if (same) result.matched += 1;
+        else result.timeChanged += 1;
+      }
       createdHere += 1;
     }
     if (shareGroup && createdHere > 0) result.sharedLessons += 1;
   }
 
+  const missingIds = (Array.isArray(input.missingItemIds) ? input.missingItemIds : []).filter((id) => typeof id === "string").slice(0, 2000);
+  if (missingIds.length) {
+    const { data: marked } = await supabase
+      .from("office_request_items")
+      .update({ result: "missing", updated_at: new Date().toISOString() })
+      .in("id", missingIds)
+      .eq("result", "pending")
+      .select("id");
+    result.missing = (marked ?? []).length;
+  }
+
+  revalidatePath("/regulars");
   revalidatePath("/calendar");
   revalidatePath("/appointments");
   revalidatePath("/dashboard");

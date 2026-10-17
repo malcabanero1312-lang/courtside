@@ -45,6 +45,7 @@ Wait until it finishes. A few "warn" lines are normal.
 10. And then `supabase/migrations/0007_sheet_import.sql` (importing the office court sheet for regular students).
 11. And then `supabase/migrations/0008_court_names_and_regulars.sql` (second court names and regular / not regular students).
 12. And then `supabase/migrations/0009_shared_lessons.sql` (two students sharing one lesson, e.g. “Lam / Kristen”).
+13. And then `supabase/migrations/0010_regular_schedules.sql` (weekly schedules for regular students and the monthly office request).
 
 > Run them in that order, once. If you see an error, read the first red line — it usually says what's wrong. Running a file twice will show "already exists" errors; that's harmless.
 

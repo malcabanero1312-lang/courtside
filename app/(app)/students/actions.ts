@@ -164,3 +164,34 @@ export async function importStudents(formData: FormData) {
       (invalid ? ` Skipped ${invalid} rows without a name and a valid phone or email.` : "")
   );
 }
+
+export async function addRegularSlot(formData: FormData) {
+  const { supabase, org } = await requireSession(["admin", "agent"]);
+  const studentId = text(formData, "student_id");
+  const weekday = Number(text(formData, "weekday"));
+  const start = text(formData, "start_time");
+  const end = text(formData, "end_time");
+  const coachId = text(formData, "coach_id") || null;
+  const path = `/students/${studentId}`;
+  if (!Number.isInteger(weekday) || weekday < 0 || weekday > 6) back(path, "error", "Choose the day.");
+  if (!/^\d{2}:\d{2}$/.test(start) || !/^\d{2}:\d{2}$/.test(end) || end <= start) back(path, "error", "The end time must be after the start time.");
+  const { error } = await supabase
+    .from("regular_slots")
+    .insert({ org_id: org.id, student_id: studentId, coach_id: coachId, weekday, start_time: start, end_time: end });
+  if (error) back(path, "error", friendlyError(error));
+  await supabase.from("students").update({ is_regular: true }).eq("id", studentId).eq("is_regular", false);
+  revalidatePath(path);
+  revalidatePath("/regulars");
+  back(path, "notice", "Weekly schedule added.");
+}
+
+export async function deleteRegularSlot(formData: FormData) {
+  const { supabase } = await requireSession(["admin", "agent"]);
+  const studentId = text(formData, "student_id");
+  const { error } = await supabase.from("regular_slots").delete().eq("id", text(formData, "id"));
+  const path = `/students/${studentId}`;
+  if (error) back(path, "error", friendlyError(error));
+  revalidatePath(path);
+  revalidatePath("/regulars");
+  back(path, "notice", "Removed from the weekly schedule.");
+}

@@ -2191,3 +2191,127 @@ input[type="date"]::-webkit-date-and-time-value {
 .cal-shared-boxes .cal-student {
   overflow-wrap: anywhere;
 }
+
+.req-student.off {
+  opacity: 0.6;
+}
+
+.req-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  flex-wrap: wrap;
+}
+
+.req-head .check {
+  flex: 1;
+  min-width: 0;
+}
+
+.req-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 0 16px 14px;
+}
+
+.req-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+}
+
+.req-group-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.req-group-head > strong {
+  min-width: 96px;
+}
+
+.req-times {
+  display: grid;
+  grid-template-columns: minmax(0, 120px) auto minmax(0, 120px);
+  align-items: center;
+  gap: 6px;
+}
+
+.req-times .input {
+  min-width: 0;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.req-dates {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.req-date {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  border: 1px dashed var(--line-strong);
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-weight: 600;
+  font-size: 13px;
+  text-decoration: line-through;
+  cursor: pointer;
+}
+
+.req-date.on {
+  border: 1px solid var(--court-2);
+  background: var(--court-2);
+  color: #fff;
+  text-decoration: none;
+}
+
+.req-date.r-matched {
+  background: #2f8a5b;
+  border-color: #2f8a5b;
+}
+
+.req-date.r-changed {
+  background: #c98a12;
+  border-color: #c98a12;
+}
+
+.req-date.r-missing {
+  background: #c2453b;
+  border-color: #c2453b;
+}
+
+.req-extra {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.req-message {
+  min-height: 260px;
+  font-family: inherit;
+  white-space: pre-wrap;
+}
+
+@media (min-width: 1000px) {
+  .req-aside {
+    position: sticky;
+    top: 16px;
+    align-self: start;
+  }
+}
