@@ -8,6 +8,7 @@ export interface StripDay {
   dayNumber: number;
   count: number;
   isToday: boolean;
+  isPast?: boolean;
 }
 
 function columns(scroller: HTMLElement): HTMLElement[] {
@@ -76,7 +77,7 @@ export function DayStrip({ days }: { days: StripDay[] }) {
           type="button"
           role="tab"
           aria-selected={index === active}
-          className={`day-chip ${index === active ? "active" : ""} ${day.isToday ? "today" : ""}`}
+          className={`day-chip ${index === active ? "active" : ""} ${day.isToday ? "today" : ""} ${day.isPast ? "past" : ""}`}
           onClick={() => jumpTo(index, true)}
         >
           <span className="day-chip-name">{day.weekday}</span>

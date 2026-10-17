@@ -2315,3 +2315,38 @@ input[type="date"]::-webkit-date-and-time-value {
     align-self: start;
   }
 }
+
+.cal-item.past {
+  background: #f0eee9;
+  border-color: #e2dfd8;
+  border-left-color: #b8b4ab !important;
+  color: #8a877f;
+  box-shadow: none;
+}
+
+.cal-item.past .muted,
+.cal-item.past .cal-student,
+.cal-item.past .mono {
+  color: #8a877f;
+}
+
+.cal-item.past .badge {
+  filter: grayscale(1);
+  opacity: 0.7;
+}
+
+.cal-item.past:hover {
+  transform: none;
+  box-shadow: none;
+  background: #e9e6e0;
+}
+
+.week-day.past-day .week-day-head strong,
+.week-day.past-day .week-day-head .small {
+  color: #a19d94;
+}
+
+.day-chip.past:not(.active) {
+  opacity: 0.55;
+}
+

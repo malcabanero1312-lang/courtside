@@ -51,6 +51,8 @@ export default async function CalendarPage({
   const coaches = (coachesRes.data ?? []) as Pick<Coach, "id" | "full_name" | "color" | "is_active">[];
   const venues = (venuesRes.data ?? []) as Pick<Venue, "id" | "name">[];
 
+  const nowMs = Date.now();
+  const isPast = (a: { ends_at: string }) => new Date(a.ends_at).getTime() < nowMs;
   const byDay = new Map<string, AppointmentWithRelations[]>();
   for (const a of appointments) {
     const key = utcToZonedInputs(a.starts_at, tz).date;
@@ -172,7 +174,8 @@ export default async function CalendarPage({
             weekday: DAY_NAMES[index],
             dayNumber: Number(day.slice(8, 10)),
             count: byDay.get(day)?.length ?? 0,
-            isToday: day === today
+            isToday: day === today,
+            isPast: day < today
           }))}
         />
         <div className="week-scroll">
@@ -181,7 +184,7 @@ export default async function CalendarPage({
               const items = byDay.get(day) ?? [];
               const dayNumber = Number(day.slice(8, 10));
               return (
-                <div key={day} className={`week-day ${day === today ? "today" : ""}`} data-today={day === today ? "1" : undefined}>
+                <div key={day} className={`week-day ${day === today ? "today" : ""} ${day < today ? "past-day" : ""}`} data-today={day === today ? "1" : undefined}>
                   <div className="week-day-head">
                     <strong>{dayNumber}</strong>
                     <span className="small muted">
@@ -211,7 +214,7 @@ export default async function CalendarPage({
                                 <Link
                                   key={g.id}
                                   href={`/appointments/${g.id}`}
-                                  className={`cal-item ${gDim ? "dim" : ""}`}
+                                  className={`cal-item ${gDim ? "dim" : ""} ${isPast(g) ? "past" : ""}`}
                                   style={{ borderLeftColor: g.coach?.color ?? "var(--court-2)" }}
                                   title={`${g.student?.full_name} · ${STATUS_META[g.status].label}`}
                                 >
@@ -239,7 +242,7 @@ export default async function CalendarPage({
                       <Link
                         key={a.id}
                         href={`/appointments/${a.id}`}
-                        className={`cal-item ${dim ? "dim" : ""}`}
+                        className={`cal-item ${dim ? "dim" : ""} ${isPast(a) ? "past" : ""}`}
                         style={{ borderLeftColor: a.coach?.color ?? "var(--court-2)" }}
                         title={STATUS_META[a.status].label}
                       >
