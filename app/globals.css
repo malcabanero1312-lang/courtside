@@ -2963,3 +2963,108 @@ input[type="date"]::-webkit-date-and-time-value {
     flex-basis: 100%;
   }
 }
+
+.sync-buttons {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.sync-btn {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink);
+  -webkit-tap-highlight-color: transparent;
+}
+
+.sync-btn:hover {
+  border-color: var(--court-2);
+  box-shadow: var(--shadow);
+}
+
+.sync-btn strong {
+  display: block;
+  font-size: 15px;
+}
+
+.sync-btn small {
+  display: block;
+  color: var(--muted);
+  font-size: 12.5px;
+}
+
+.sync-btn-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  color: #fff;
+  flex-shrink: 0;
+}
+
+.sync-btn.apple .sync-btn-icon {
+  background: #1c1c1e;
+}
+
+.sync-btn.google .sync-btn-icon {
+  background: #1a73e8;
+}
+
+.sync-copy {
+  grid-column: 1 / -1;
+  justify-self: start;
+}
+
+.sync-list {
+  margin: 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+@media (max-width: 560px) {
+  .sync-buttons {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.sheet-name-box {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border-radius: 12px;
+  border: 1px dashed var(--line-strong);
+  background: var(--surface-2);
+}
+
+.sheet-name-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+}
+
+.sheet-name-chip button {
+  margin-left: 4px;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 2px;
+}
+
+.sheet-scan-note {
+  color: var(--court-2);
+  font-weight: 600;
+}

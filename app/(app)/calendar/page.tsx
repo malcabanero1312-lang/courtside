@@ -84,6 +84,9 @@ export default async function CalendarPage({
                 <Icon name="upload" size={15} /> Import sheet
               </Link>
             ) : null}
+            <Link className="btn small" href="/calendar/sync">
+              <Icon name="calendar" size={15} /> Sync to phone
+            </Link>
             <details className="disclosure picker">
               <summary className="btn small">
                 <Icon name="download" size={15} /> Spreadsheet

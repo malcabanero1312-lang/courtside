@@ -10,12 +10,20 @@ export const metadata: Metadata = { title: "Import office sheet" };
 export default async function ImportPage() {
   const { supabase, org } = await requireSession(["admin", "agent"]);
   const [coachesRes, venuesRes, studentsRes, courtsRes] = await Promise.all([
-    supabase.from("coaches").select("id, full_name").eq("org_id", org.id).eq("is_active", true).order("full_name"),
+    supabase.from("coaches").select("id, full_name, sheet_names").eq("org_id", org.id).eq("is_active", true).order("full_name"),
     supabase.from("venues").select("id, name").eq("org_id", org.id).eq("is_active", true).order("name"),
     supabase.from("students").select("full_name").eq("org_id", org.id).limit(20000),
     supabase.from("courts").select("*").eq("org_id", org.id)
   ]);
-  const coaches = (coachesRes.data ?? []) as { id: string; full_name: string }[];
+  let coaches = ((coachesRes.data ?? []) as { id: string; full_name: string; sheet_names?: string[] | null }[]).map((c) => ({
+    id: c.id,
+    full_name: c.full_name,
+    sheet_names: c.sheet_names ?? []
+  }));
+  if (coachesRes.error) {
+    const { data: basic } = await supabase.from("coaches").select("id, full_name").eq("org_id", org.id).eq("is_active", true).order("full_name");
+    coaches = ((basic ?? []) as { id: string; full_name: string }[]).map((c) => ({ ...c, sheet_names: [] }));
+  }
   const venues = (venuesRes.data ?? []) as { id: string; name: string }[];
   const courts = ((courtsRes.data ?? []) as { venue_id: string; name: string; alt_name?: string | null }[]).map((c) => ({
     venueId: c.venue_id,

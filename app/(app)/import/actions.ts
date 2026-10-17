@@ -380,3 +380,33 @@ export async function importSheetSessions(input: ImportInput): Promise<ImportRes
   revalidatePath("/students");
   return result;
 }
+
+export async function saveCoachSheetName(coachId: string, name: string): Promise<{ ok: boolean; names?: string[]; error?: string }> {
+  const { supabase, org } = await requireSession(["admin", "agent"]);
+  const clean = name.replace(/\s+/g, " ").trim().slice(0, 60);
+  if (clean.length < 2) return { ok: false, error: "Type at least 2 letters." };
+  const { data, error } = await supabase.from("coaches").select("sheet_names").eq("id", coachId).eq("org_id", org.id).maybeSingle();
+  if (error || !data) {
+    return { ok: false, error: "Couldn't save the name. Run database update 0013 in Supabase first." };
+  }
+  const current = ((data as { sheet_names: string[] | null }).sheet_names ?? []).filter(Boolean);
+  const names = current.some((n) => n.toLowerCase() === clean.toLowerCase()) ? current : [...current, clean].slice(0, 12);
+  const { error: updateError } = await supabase.from("coaches").update({ sheet_names: names }).eq("id", coachId);
+  if (updateError) {
+    logError("coach-sheet-name", updateError);
+    return { ok: false, error: "Couldn't save the name." };
+  }
+  revalidatePath("/import");
+  return { ok: true, names };
+}
+
+export async function removeCoachSheetName(coachId: string, name: string): Promise<{ ok: boolean; names?: string[] }> {
+  const { supabase, org } = await requireSession(["admin", "agent"]);
+  const { data } = await supabase.from("coaches").select("sheet_names").eq("id", coachId).eq("org_id", org.id).maybeSingle();
+  if (!data) return { ok: false };
+  const names = ((data as { sheet_names: string[] | null }).sheet_names ?? []).filter((n) => n.toLowerCase() !== name.toLowerCase());
+  const { error } = await supabase.from("coaches").update({ sheet_names: names }).eq("id", coachId);
+  if (error) return { ok: false };
+  revalidatePath("/import");
+  return { ok: true, names };
+}

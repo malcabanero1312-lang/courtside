@@ -3,8 +3,8 @@
 import Link from "next/link";
 import { useMemo, useState, useTransition } from "react";
 import { Icon } from "@/components/icons";
-import { importSheetSessions, type ImportResult } from "@/app/(app)/import/actions";
-import { parseCourtSheet } from "@/lib/court-sheet";
+import { importSheetSessions, removeCoachSheetName, saveCoachSheetName, type ImportResult } from "@/app/(app)/import/actions";
+import { parseCourtSheet, type CoachAlias, type SheetTextItem } from "@/lib/court-sheet";
 import { readPdfTextInBrowser } from "@/lib/pdf-browser";
 import { splitSharedNames } from "@/lib/shared-lessons";
 import { buildMissingMessage, namesMatch, time12 } from "@/lib/regular";
@@ -88,7 +88,7 @@ export function SheetImport({
   today,
   requested = []
 }: {
-  coaches: { id: string; full_name: string }[];
+  coaches: { id: string; full_name: string; sheet_names: string[] }[];
   venues: { id: string; name: string }[];
   courts: { venueId: string; name: string; altName: string | null }[];
   studentNames: string[];
@@ -104,6 +104,13 @@ export function SheetImport({
   const [venueId, setVenueId] = useState(venues[0]?.id ?? "");
   const [rows, setRows] = useState<Row[]>([]);
   const [result, setResult] = useState<ImportResult | null>(null);
+  const [items, setItems] = useState<SheetTextItem[] | null>(null);
+  const [savedNames, setSavedNames] = useState<Record<string, string[]>>(() =>
+    Object.fromEntries(coaches.map((c) => [c.id, c.sheet_names ?? []]))
+  );
+  const [nameInput, setNameInput] = useState("");
+  const [remember, setRemember] = useState(true);
+  const [scanNote, setScanNote] = useState<string | null>(null);
   const [saving, startSaving] = useTransition();
 
   const courtLookup = useMemo(() => {
@@ -183,23 +190,84 @@ export function SheetImport({
     );
   };
 
-  const showSheet = (data: ParsedSheet) => {
+  const aliasesFrom = (names: Record<string, string[]>): CoachAlias[] =>
+    coaches.filter((c) => (names[c.id] ?? []).length).map((c) => ({ label: c.full_name, names: names[c.id] }));
+
+  const parseItems = (list: SheetTextItem[], names: Record<string, string[]>): ParsedSheet => {
+    const parsed = parseCourtSheet(list, { coachAliases: aliasesFrom(names) });
+    return { sessions: parsed.sessions, coaches: parsed.coaches, notes: parsed.notes, days: parsed.days };
+  };
+
+  const showSheet = (data: ParsedSheet, preferredCoachId?: string) => {
     setSheet(data);
-    const matched = data.coaches.find((c) => bestCoachMatch(c, coaches));
+    const preferred = preferredCoachId ? coaches.find((c) => c.id === preferredCoachId) : null;
+    const preferredLabel = preferred && data.coaches.includes(preferred.full_name.toUpperCase()) ? preferred.full_name.toUpperCase() : null;
+    const matched = preferredLabel ?? data.coaches.find((c) => bestCoachMatch(c, coaches));
     chooseCoach(matched ?? data.coaches[0] ?? "", data);
+    if (preferred && !preferredLabel) setCoachId(preferred.id);
+  };
+
+  const scanForName = async () => {
+    const name = nameInput.replace(/\s+/g, " ").trim();
+    setScanNote(null);
+    if (!items) return;
+    if (!coachId) {
+      setScanNote("Choose the Courtside coach first, then type their name as it's written on the sheet.");
+      return;
+    }
+    if (name.length < 2) {
+      setScanNote("Type at least 2 letters of the name on the sheet.");
+      return;
+    }
+    const next = { ...savedNames, [coachId]: Array.from(new Set([...(savedNames[coachId] ?? []), name])) };
+    const parsed = parseItems(items, next);
+    const coach = coaches.find((c) => c.id === coachId);
+    const label = coach?.full_name.toUpperCase() ?? "";
+    const found = parsed.sessions.filter((s) => s.coach === label).length;
+    setSavedNames(next);
+    showSheet(parsed, coachId);
+    setNameInput("");
+    setScanNote(found ? `Found ${found} session${found === 1 ? "" : "s"} for “${name}”.` : `No cells with “${name}” were found on this sheet. Check the spelling as it appears on the PDF.`);
+    if (remember && found) {
+      const res = await saveCoachSheetName(coachId, name);
+      if (!res.ok) setScanNote((note) => `${note ?? ""} ${res.error ?? ""}`.trim());
+    }
+  };
+
+  const forgetName = async (id: string, name: string) => {
+    const next = { ...savedNames, [id]: (savedNames[id] ?? []).filter((n) => n.toLowerCase() !== name.toLowerCase()) };
+    setSavedNames(next);
+    if (items) showSheet(parseItems(items, next), id);
+    await removeCoachSheetName(id, name);
+  };
+
+  const pickCourtsideCoach = (id: string) => {
+    setCoachId(id);
+    setScanNote(null);
+    const coach = coaches.find((c) => c.id === id);
+    if (coach && sheet?.coaches.includes(coach.full_name.toUpperCase())) chooseCoach(coach.full_name.toUpperCase());
+    else if (coach) {
+      const first = coach.full_name.split(" ")[0].toUpperCase();
+      if (sheet?.coaches.includes(first)) chooseCoach(first);
+    }
   };
 
   const readOnServer = async (file: File): Promise<boolean> => {
     const body = new FormData();
     body.append("file", file);
     const response = await fetch("/api/sheet/parse", { method: "POST", body });
-    const data = (await response.json().catch(() => ({}))) as ParsedSheet & { error?: string };
+    const data = (await response.json().catch(() => ({}))) as ParsedSheet & { error?: string; items?: SheetTextItem[] };
     if (!response.ok || data.error) {
       setError(data.error ?? `We couldn't read that file (error ${response.status}).`);
       setSheet(null);
       return false;
     }
-    showSheet(data);
+    if (data.items?.length) {
+      setItems(data.items);
+      showSheet(parseItems(data.items, savedNames));
+    } else {
+      showSheet(data);
+    }
     return true;
   };
 
@@ -208,6 +276,8 @@ export function SheetImport({
     setError(null);
     setResult(null);
     setSheet(null);
+    setItems(null);
+    setScanNote(null);
     setFileName(file.name);
     try {
       const head = new Uint8Array(await file.slice(0, 5).arrayBuffer());
@@ -232,12 +302,12 @@ export function SheetImport({
         setError("This PDF has no readable text (it may be a scanned picture). Ask the office for the PDF exported from Excel.");
         return;
       }
-      const parsed = parseCourtSheet(items);
+      setItems(items);
+      const parsed = parseItems(items, savedNames);
+      showSheet(parsed);
       if (parsed.sessions.length === 0) {
-        setError("We couldn't find any “COACH …” bookings in this PDF. Make sure it's the office's court booking sheet.");
-        return;
+        setScanNote("No coaches were found automatically. Choose the Courtside coach and type their name exactly as it's written on this sheet.");
       }
-      showSheet({ sessions: parsed.sessions, coaches: parsed.coaches, notes: parsed.notes, days: parsed.days });
     } catch {
       setError("Something went wrong reading the file. Check your internet connection and try again.");
     } finally {
@@ -408,18 +478,8 @@ export function SheetImport({
           <div className="card-title">2. Choose the coach</div>
           <div className="form-grid">
             <label className="field">
-              <span>Coach on the sheet</span>
-              <select className="input" value={sheetCoach} onChange={(e) => chooseCoach(e.target.value)}>
-                {sheet.coaches.map((c) => (
-                  <option key={c} value={c}>
-                    {c} ({coachCounts.get(c) ?? 0} sessions)
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="field">
               <span>Courtside coach</span>
-              <select className="input" value={coachId} onChange={(e) => setCoachId(e.target.value)}>
+              <select className="input" value={coachId} onChange={(e) => pickCourtsideCoach(e.target.value)}>
                 <option value="">Choose…</option>
                 {coaches.map((c) => (
                   <option key={c.id} value={c.id}>
@@ -427,7 +487,17 @@ export function SheetImport({
                   </option>
                 ))}
               </select>
-              {!coachId ? <small>No coach called “{sheetCoach}” yet — add them on the Coaches page first.</small> : null}
+            </label>
+            <label className="field">
+              <span>Coach found on the sheet</span>
+              <select className="input" value={sheetCoach} onChange={(e) => chooseCoach(e.target.value)} disabled={!sheet.coaches.length}>
+                {sheet.coaches.length === 0 ? <option value="">None found yet</option> : null}
+                {sheet.coaches.map((c) => (
+                  <option key={c} value={c}>
+                    {c} ({coachCounts.get(c) ?? 0} sessions)
+                  </option>
+                ))}
+              </select>
             </label>
             <label className="field">
               <span>Venue</span>
@@ -439,6 +509,50 @@ export function SheetImport({
                 ))}
               </select>
             </label>
+          </div>
+          <div className="sheet-name-box">
+            <div className="small" style={{ fontWeight: 650 }}>
+              {coachId ? `${coaches.find((c) => c.id === coachId)?.full_name}'s name on the sheet` : "Coach's name on the sheet"}
+            </div>
+            <div className="small muted">
+              If the office writes the coach differently (for example “JEFF”, “Coach J.” or just their name without “COACH”), type it here.
+              Courtside finds every cell with that name and reads the student, court, date and time.
+            </div>
+            {coachId && (savedNames[coachId] ?? []).length ? (
+              <div className="row wrap" style={{ gap: 6 }}>
+                {(savedNames[coachId] ?? []).map((n) => (
+                  <span key={n} className="badge plain tone-green sheet-name-chip">
+                    {n}
+                    <button type="button" aria-label={`Forget ${n}`} onClick={() => forgetName(coachId, n)}>
+                      ×
+                    </button>
+                  </span>
+                ))}
+              </div>
+            ) : null}
+            <div className="sheet-name-row">
+              <input
+                className="input"
+                value={nameInput}
+                onChange={(e) => setNameInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    void scanForName();
+                  }
+                }}
+                placeholder="e.g. JEFFRIE"
+                aria-label="Coach's name on the sheet"
+              />
+              <button type="button" className="btn primary small" onClick={() => void scanForName()} disabled={!items}>
+                <Icon name="search" size={14} /> Scan
+              </button>
+            </div>
+            <label className="check small">
+              <input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} />
+              Remember this name for next time
+            </label>
+            {scanNote ? <div className="small sheet-scan-note">{scanNote}</div> : null}
           </div>
           {coachNotes.length ? (
             <div className="notice info" style={{ margin: 0 }}>

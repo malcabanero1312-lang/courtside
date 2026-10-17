@@ -36,25 +36,34 @@ export interface ParsedSheet {
   days: string[];
 }
 
+export interface CoachAlias {
+  label: string;
+  names: string[];
+}
+
+export interface ParseOptions {
+  coachAliases?: CoachAlias[];
+}
+
 const MONTHS: Record<string, number> = {
-  january: 1,
-  february: 2,
-  march: 3,
-  april: 4,
+  jan: 1,
+  feb: 2,
+  mar: 3,
+  apr: 4,
   may: 5,
-  june: 6,
-  july: 7,
-  august: 8,
-  september: 9,
-  october: 10,
-  november: 11,
-  december: 12
+  jun: 6,
+  jul: 7,
+  aug: 8,
+  sep: 9,
+  sept: 9,
+  oct: 10,
+  nov: 11,
+  dec: 12
 };
 
-const DAY_TITLE = /^(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)\s*\((\d{1,2})\s+([A-Za-z]+)\s+(\d{4})\)/i;
-const TIME_LABEL = /^(\d{1,2})\s*(am|pm)$/i;
-const COURT_HEADER = /courts?\s*-\s*\S+/i;
-const COACH_PREFIX = /^COACH\s+(.+)$/i;
+const WEEKDAY = "(?:mon|tue|tues|wed|weds|thu|thur|thurs|fri|sat|sun)[a-z]*";
+const COURT_HEADER = /\bcourts?\b|\bct\.?\s*\d/i;
+const COACH_PREFIX = /^(?:coach\b|ch\.|ch\b)\s*[:\-]?\s*(.+)$/i;
 
 interface DayBlock {
   date: string;
@@ -63,11 +72,6 @@ interface DayBlock {
   y: number;
   right: number;
   bottom: number;
-}
-
-function to24(hour: number, meridiem: string): number {
-  const h = hour % 12;
-  return meridiem.toLowerCase() === "pm" ? h + 12 : h;
 }
 
 function pad(n: number): string {
@@ -82,28 +86,136 @@ function centerX(item: SheetTextItem): number {
   return item.x + item.width / 2;
 }
 
-export function parseCourtSheet(items: SheetTextItem[]): ParsedSheet {
+function monthNumber(word: string): number | null {
+  const key = word.toLowerCase().replace(/\.$/, "");
+  if (MONTHS[key]) return MONTHS[key];
+  const short = key.slice(0, 3);
+  return key.length >= 3 && MONTHS[short] ? MONTHS[short] : null;
+}
+
+function validDate(y: number, m: number, d: number): string | null {
+  if (!y || !m || !d || m < 1 || m > 12 || d < 1 || d > 31) return null;
+  const date = new Date(Date.UTC(y, m - 1, d));
+  if (date.getUTCMonth() !== m - 1) return null;
+  return `${y}-${pad(m)}-${pad(d)}`;
+}
+
+export function parseDateText(raw: string, fallbackYear: number): string | null {
+  const text = clean(raw);
+  if (!text || text.length > 70) return null;
+  let m = text.match(/\b(\d{1,2})(?:st|nd|rd|th)?\s+([A-Za-z]{3,})\.?,?\s+(\d{4})\b/);
+  if (m && monthNumber(m[2])) return validDate(Number(m[3]), monthNumber(m[2]) as number, Number(m[1]));
+  m = text.match(/\b([A-Za-z]{3,})\.?\s+(\d{1,2})(?:st|nd|rd|th)?,?\s+(\d{4})\b/);
+  if (m && monthNumber(m[1])) return validDate(Number(m[3]), monthNumber(m[1]) as number, Number(m[2]));
+  m = text.match(/\b(\d{4})-(\d{1,2})-(\d{1,2})\b/);
+  if (m) return validDate(Number(m[1]), Number(m[2]), Number(m[3]));
+  m = text.match(/\b(\d{1,2})[/.](\d{1,2})[/.](\d{2,4})\b/);
+  if (m) {
+    const a = Number(m[1]);
+    const b = Number(m[2]);
+    const y = m[3].length === 2 ? 2000 + Number(m[3]) : Number(m[3]);
+    return b > 12 ? validDate(y, a, b) : validDate(y, b, a);
+  }
+  const weekdayFirst = new RegExp(`^${WEEKDAY}\\.?,?\\s*\\(?`, "i");
+  if (weekdayFirst.test(text)) {
+    const rest = text.replace(weekdayFirst, "");
+    m = rest.match(/^(\d{1,2})(?:st|nd|rd|th)?\s+([A-Za-z]{3,})\b/);
+    if (m && monthNumber(m[2])) return validDate(fallbackYear, monthNumber(m[2]) as number, Number(m[1]));
+    m = rest.match(/^([A-Za-z]{3,})\.?\s+(\d{1,2})\b/);
+    if (m && monthNumber(m[1])) return validDate(fallbackYear, monthNumber(m[1]) as number, Number(m[2]));
+    m = rest.match(/^(\d{1,2})[/.](\d{1,2})\b/);
+    if (m) return validDate(fallbackYear, Number(m[2]), Number(m[1]));
+  }
+  return null;
+}
+
+export function parseTimeLabel(raw: string): number | null {
+  const text = clean(raw).toLowerCase().replace(/\./g, "");
+  const m = text.match(/^(\d{1,2})(?::(\d{2}))?\s*(am|pm)?(?:\s*(?:-|–|—|to)\s*\d{1,2}(?::\d{2})?\s*(?:am|pm)?)?$/);
+  if (!m) return null;
+  const hasMeridiem = Boolean(m[3]);
+  const hasColon = m[2] !== undefined;
+  if (!hasMeridiem && !hasColon) return null;
+  let hour = Number(m[1]);
+  if (hour > 23) return null;
+  if (hasMeridiem) {
+    hour = hour % 12;
+    if (m[3] === "pm") hour += 12;
+  }
+  return hour;
+}
+
+function escapeRegex(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function aliasMatchers(aliases: CoachAlias[]): { label: string; re: RegExp }[] {
+  const list: { label: string; re: RegExp; length: number }[] = [];
+  for (const alias of aliases) {
+    for (const name of alias.names) {
+      const n = clean(name);
+      if (n.length < 2) continue;
+      list.push({ label: alias.label, re: new RegExp(`(^|[^A-Za-z0-9])${escapeRegex(n)}(?=$|[^A-Za-z0-9])`, "i"), length: n.length });
+    }
+  }
+  return list.sort((a, b) => b.length - a.length);
+}
+
+function readCell(lines: string[], matchers: { label: string; re: RegExp }[]): { coach: string; student: string } | null {
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    for (const matcher of matchers) {
+      if (matcher.re.test(line)) {
+        const remainder = clean(line.replace(matcher.re, "$1").replace(/^\s*(?:coach\b|ch\.|ch\b)\s*[:\-]?/i, "").replace(/^[\s:\-–|/]+|[\s:\-–|/]+$/g, ""));
+        const student = clean([remainder, ...lines.filter((_, j) => j !== i)].filter(Boolean).join(" "));
+        return { coach: matcher.label.toUpperCase(), student };
+      }
+    }
+  }
+  for (let i = 0; i < lines.length; i++) {
+    const prefix = lines[i].match(COACH_PREFIX);
+    if (prefix) {
+      const coachText = clean(prefix[1]);
+      const student = clean(lines.filter((_, j) => j !== i).join(" "));
+      return { coach: coachText.toUpperCase(), student };
+    }
+  }
+  return null;
+}
+
+function findYear(items: SheetTextItem[]): number {
+  const counts = new Map<number, number>();
+  for (const item of items) {
+    for (const m of item.str.matchAll(/\b(20\d{2})\b/g)) {
+      const y = Number(m[1]);
+      counts.set(y, (counts.get(y) ?? 0) + 1);
+    }
+  }
+  let best = new Date().getUTCFullYear();
+  let bestCount = 0;
+  counts.forEach((count, year) => {
+    if (count > bestCount) {
+      best = year;
+      bestCount = count;
+    }
+  });
+  return best;
+}
+
+export function parseCourtSheet(items: SheetTextItem[], options: ParseOptions = {}): ParsedSheet {
   const slots: SheetSlot[] = [];
   const notes: SheetDayNote[] = [];
+  const matchers = aliasMatchers(options.coachAliases ?? []);
+  const year = findYear(items);
   const pages = Array.from(new Set(items.map((i) => i.page))).sort((a, b) => a - b);
 
   for (const page of pages) {
     const pageItems = items.filter((i) => i.page === page && i.str.trim());
     const titles = pageItems
-      .map((item) => ({ item, match: clean(item.str).match(DAY_TITLE) }))
-      .filter((t): t is { item: SheetTextItem; match: RegExpMatchArray } => Boolean(t.match));
+      .map((item) => ({ item, date: COURT_HEADER.test(item.str) || parseTimeLabel(item.str) !== null ? null : parseDateText(item.str, year) }))
+      .filter((t): t is { item: SheetTextItem; date: string } => Boolean(t.date));
 
-    const blocks: DayBlock[] = titles.map(({ item, match }) => {
-      const month = MONTHS[match[3].toLowerCase()] ?? 1;
-      return {
-        date: `${match[4]}-${pad(month)}-${pad(Number(match[2]))}`,
-        page,
-        x: item.x,
-        y: item.y,
-        right: Infinity,
-        bottom: Infinity
-      };
-    });
+    const blocks: DayBlock[] = titles.map(({ item, date }) => ({ date, page, x: item.x, y: item.y, right: Infinity, bottom: Infinity }));
 
     for (const block of blocks) {
       const sameRow = blocks.filter((b) => b !== block && Math.abs(b.y - block.y) < 6 && b.x > block.x);
@@ -113,62 +225,81 @@ export function parseCourtSheet(items: SheetTextItem[]): ParsedSheet {
     }
 
     for (const block of blocks) {
-      const inside = pageItems.filter(
-        (i) => i.x >= block.x - 6 && centerX(i) < block.right && i.y > block.y + 2 && i.y < block.bottom
-      );
+      const inside = pageItems.filter((i) => i.x >= block.x - 6 && centerX(i) < block.right && i.y > block.y + 2 && i.y < block.bottom);
 
       const headerNote = pageItems.find(
         (i) => Math.abs(i.y - block.y) < 4 && i.x > block.x + 20 && i.x < block.right && /^\(.*\)$/.test(clean(i.str))
       );
       if (headerNote) notes.push({ date: block.date, note: clean(headerNote.str).replace(/^\(|\)$/g, "") });
 
-      const headers = inside.filter((i) => COURT_HEADER.test(clean(i.str)));
-      if (!headers.length) continue;
-      const headerY = Math.min(...headers.map((h) => h.y));
-      const columns = headers
-        .filter((h) => Math.abs(h.y - headerY) < 4)
-        .map((h) => ({ name: clean(h.str), center: centerX(h) }))
-        .sort((a, b) => a.center - b.center);
+      const timeItems = inside
+        .map((i) => ({ item: i, hour: parseTimeLabel(i.str) }))
+        .filter((t): t is { item: SheetTextItem; hour: number } => t.hour !== null);
+      const courtItems = inside.filter((i) => COURT_HEADER.test(clean(i.str)) && clean(i.str).length <= 32);
+      if (!timeItems.length || !courtItems.length) continue;
 
-      const rows = inside
-        .map((i) => ({ item: i, match: clean(i.str).match(TIME_LABEL) }))
-        .filter((r): r is { item: SheetTextItem; match: RegExpMatchArray } => Boolean(r.match) && r.item.x < columns[0].center - 10)
-        .map((r) => ({ hour: to24(Number(r.match[1]), r.match[2]), y: r.item.y }))
-        .sort((a, b) => a.y - b.y);
-      if (!rows.length) continue;
+      const xs = timeItems.map((t) => centerX(t.item));
+      const ys = timeItems.map((t) => t.item.y);
+      const vertical = Math.max(...ys) - Math.min(...ys) >= Math.max(...xs) - Math.min(...xs);
 
-      const rowBounds = rows.map((row, idx) => {
-        const prev = rows[idx - 1];
-        const next = rows[idx + 1];
-        const half = next ? (next.y - row.y) / 2 : prev ? (row.y - prev.y) / 2 : 10;
-        return {
-          hour: row.hour,
-          top: prev ? (prev.y + row.y) / 2 : Math.max(headerY + 3, row.y - half),
-          bottom: next ? (row.y + next.y) / 2 : row.y + half
-        };
-      });
+      let rowAxis: { key: string; pos: number }[];
+      let colAxis: { key: string; pos: number }[];
+      let rowIsTime: boolean;
+      let gridTop: number;
+      let gridLeft: number;
 
-      const colBounds = columns.map((col, idx) => {
-        const prev = columns[idx - 1];
-        const next = columns[idx + 1];
-        const half = next ? (next.center - col.center) / 2 : prev ? (col.center - prev.center) / 2 : 25;
-        return {
-          name: col.name,
-          left: prev ? (prev.center + col.center) / 2 : col.center - half,
-          right: next ? (col.center + next.center) / 2 : col.center + half
-        };
-      });
+      if (vertical) {
+        const headerY = Math.min(...courtItems.map((h) => h.y));
+        const headers = courtItems.filter((h) => Math.abs(h.y - headerY) < 4);
+        const firstCol = Math.min(...headers.map(centerX));
+        rowAxis = timeItems
+          .filter((t) => centerX(t.item) < firstCol - 10)
+          .map((t) => ({ key: String(t.hour), pos: t.item.y }));
+        colAxis = headers.map((h) => ({ key: clean(h.str), pos: centerX(h) }));
+        rowIsTime = true;
+        gridTop = headerY + 2;
+        gridLeft = -Infinity;
+      } else {
+        const headerY = Math.min(...timeItems.map((t) => t.item.y));
+        const times = timeItems.filter((t) => Math.abs(t.item.y - headerY) < 4);
+        const firstCol = Math.min(...times.map((t) => centerX(t.item)));
+        colAxis = times.map((t) => ({ key: String(t.hour), pos: centerX(t.item) }));
+        rowAxis = courtItems.filter((c) => centerX(c) < firstCol - 10).map((c) => ({ key: clean(c.str), pos: c.y }));
+        rowIsTime = false;
+        gridTop = headerY + 2;
+        gridLeft = -Infinity;
+      }
+      if (!rowAxis.length || !colAxis.length) continue;
+      rowAxis.sort((a, b) => a.pos - b.pos);
+      colAxis.sort((a, b) => a.pos - b.pos);
+
+      const bounds = (axis: { key: string; pos: number }[], fallback: number, minStart: number) =>
+        axis.map((entry, idx) => {
+          const prev = axis[idx - 1];
+          const next = axis[idx + 1];
+          const half = next ? (next.pos - entry.pos) / 2 : prev ? (entry.pos - prev.pos) / 2 : fallback;
+          return {
+            key: entry.key,
+            start: prev ? (prev.pos + entry.pos) / 2 : Math.max(minStart, entry.pos - half),
+            end: next ? (entry.pos + next.pos) / 2 : entry.pos + half
+          };
+        });
+      const rowBounds = bounds(rowAxis, 10, gridTop);
+      const colBounds = bounds(colAxis, 25, gridLeft);
 
       const cells = new Map<string, SheetTextItem[]>();
       for (const item of inside) {
-        if (item.y <= headerY + 2) continue;
+        if (item.y <= gridTop) continue;
         const text = clean(item.str);
-        if (TIME_LABEL.test(text) || COURT_HEADER.test(text)) continue;
+        if (parseTimeLabel(text) !== null) continue;
+        if (COURT_HEADER.test(text) && text.length <= 32 && !matchers.some((m) => m.re.test(text)) && !COACH_PREFIX.test(text)) continue;
         const cx = centerX(item);
-        const col = colBounds.find((c) => cx >= c.left && cx < c.right);
-        const row = rowBounds.find((r) => item.y >= r.top && item.y < r.bottom);
+        const col = colBounds.find((c) => cx >= c.start && cx < c.end);
+        const row = rowBounds.find((r) => item.y >= r.start && item.y < r.end);
         if (!col || !row) continue;
-        const key = `${row.hour}|${col.name}`;
+        const hour = rowIsTime ? row.key : col.key;
+        const court = rowIsTime ? col.key : row.key;
+        const key = `${hour}|${court}`;
         cells.set(key, [...(cells.get(key) ?? []), item]);
       }
 
@@ -178,11 +309,9 @@ export function parseCourtSheet(items: SheetTextItem[]): ParsedSheet {
           .sort((a, b) => a.y - b.y || a.x - b.x)
           .map((i) => clean(i.str))
           .filter(Boolean);
-        const coachLine = lines.findIndex((l) => COACH_PREFIX.test(l));
-        if (coachLine === -1) continue;
-        const coach = clean(lines[coachLine].replace(COACH_PREFIX, "$1"));
-        const student = clean(lines.filter((_, i) => i !== coachLine).join(" "));
-        slots.push({ date: block.date, hour: Number(hourText), court, coach, student });
+        const cell = readCell(lines, matchers);
+        if (!cell) continue;
+        slots.push({ date: block.date, hour: Number(hourText), court, coach: cell.coach, student: cell.student });
       }
     }
   }

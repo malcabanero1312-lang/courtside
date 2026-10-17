@@ -76,13 +76,7 @@ export async function POST(request: NextRequest) {
       );
     }
     const parsed = parseCourtSheet(items);
-    if (parsed.sessions.length === 0) {
-      return NextResponse.json(
-        { error: "We couldn't find any coach bookings in this file. Check it's the monthly court bookings sheet." },
-        { status: 422 }
-      );
-    }
-    return NextResponse.json({ sessions: parsed.sessions, coaches: parsed.coaches, notes: parsed.notes, days: parsed.days });
+    return NextResponse.json({ sessions: parsed.sessions, coaches: parsed.coaches, notes: parsed.notes, days: parsed.days, items });
   } catch (error) {
     logError("sheet-parse", error);
     return NextResponse.json({ error: "We couldn't read this PDF. Please try again or send it to your admin." }, { status: 500 });
