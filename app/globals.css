@@ -2374,3 +2374,26 @@ input[type="date"]::-webkit-date-and-time-value {
     justify-content: center;
   }
 }
+
+.week-edge-hint {
+  position: fixed;
+  top: 50%;
+  z-index: 60;
+  transform: translateY(-50%);
+  padding: 10px 14px;
+  border-radius: 999px;
+  background: var(--court);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 650;
+  box-shadow: var(--shadow);
+  pointer-events: none;
+}
+
+.week-edge-hint.next {
+  right: 12px;
+}
+
+.week-edge-hint.prev {
+  left: 12px;
+}

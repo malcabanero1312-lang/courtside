@@ -179,6 +179,9 @@ export default async function CalendarPage({
             isToday: day === today,
             isPast: day < today
           }))}
+          initialDay={/^[0-6]$/.test(one(params.day)) ? Number(one(params.day)) : null}
+          prevWeekHref={link({ week: addDays(weekStart, -7), day: "6" })}
+          nextWeekHref={link({ week: addDays(weekStart, 7), day: "0" })}
         />
         <div className="week-scroll">
           <div className="week">
