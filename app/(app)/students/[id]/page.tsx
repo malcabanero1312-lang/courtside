@@ -8,7 +8,7 @@ import { ButtonLink, Card, CoachDot, EmptyState, Flash, PageHeader, StatusBadge 
 import { Icon } from "@/components/icons";
 import { SubmitButton } from "@/components/buttons";
 import { StudentFields } from "../student-fields";
-import { addRegularSlot, deleteRegularSlot, setStudentArchived, updateStudent } from "../actions";
+import { addRegularSlot, deleteRegularSlot, setStudentArchived, setStudentRegular, updateStudent } from "../actions";
 import { WEEKDAY_NAMES, timeRange12 } from "@/lib/regular";
 
 export const metadata: Metadata = { title: "Student" };
@@ -84,9 +84,22 @@ export default async function StudentPage({
         }
         actions={
           !student.is_archived ? (
-            <ButtonLink href={`/appointments/new?student=${student.id}`} variant="primary" icon="plus">
-              Book a session
-            </ButtonLink>
+            <div className="row wrap" style={{ gap: 8 }}>
+              <form action={setStudentRegular} className="row" style={{ gap: 6 }}>
+                <input type="hidden" name="id" value={student.id} />
+                <input type="hidden" name="regular" value={student.is_regular ? "0" : "1"} />
+                <input type="hidden" name="return_to" value={`/students/${student.id}`} />
+                <span className={`badge plain ${student.is_regular ? "tone-green" : "tone-muted"}`}>
+                  {student.is_regular ? "Regular student" : "Not regular"}
+                </span>
+                <SubmitButton size="small" variant="ghost" pendingText="Saving…">
+                  {student.is_regular ? "Make not regular" : "Make regular"}
+                </SubmitButton>
+              </form>
+              <ButtonLink href={`/appointments/new?student=${student.id}`} variant="primary" icon="plus">
+                Book a session
+              </ButtonLink>
+            </div>
           ) : null
         }
       />

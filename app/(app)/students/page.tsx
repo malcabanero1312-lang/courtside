@@ -7,7 +7,7 @@ import { Card, EmptyState, Flash, Fold, PageHeader, one } from "@/components/ui"
 import { Icon } from "@/components/icons";
 import { SubmitButton } from "@/components/buttons";
 import { StudentFields } from "./student-fields";
-import { createStudent, importStudents } from "./actions";
+import { createStudent, importStudents, setStudentRegular } from "./actions";
 
 export const metadata: Metadata = { title: "Students" };
 
@@ -104,7 +104,18 @@ export default async function StudentsPage({
                         <Link href={`/students/${s.id}`} className="cell-main">
                           {s.full_name}
                         </Link>
-                        {s.is_regular ? <span className="badge plain tone-green" style={{ marginLeft: 6 }}>Regular</span> : null}
+                        <form action={setStudentRegular} style={{ display: "inline", marginLeft: 6 }}>
+                          <input type="hidden" name="id" value={s.id} />
+                          <input type="hidden" name="regular" value={s.is_regular ? "0" : "1"} />
+                          <input type="hidden" name="return_to" value={q ? `/students?q=${encodeURIComponent(q)}` : "/students"} />
+                          <button
+                            type="submit"
+                            className={`badge plain import-regular ${s.is_regular ? "tone-green" : "tone-muted"}`}
+                            title={s.is_regular ? "Tap to mark as not regular" : "Tap to mark as regular"}
+                          >
+                            {s.is_regular ? "Regular" : "Not regular"}
+                          </button>
+                        </form>
                         {s.guardian_name ? <div className="cell-sub">Guardian: {s.guardian_name}</div> : null}
                       </td>
                       <td>

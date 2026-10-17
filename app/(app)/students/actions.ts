@@ -195,3 +195,17 @@ export async function deleteRegularSlot(formData: FormData) {
   revalidatePath("/regulars");
   back(path, "notice", "Removed from the weekly schedule.");
 }
+
+export async function setStudentRegular(formData: FormData) {
+  const { supabase } = await requireSession(["admin", "agent"]);
+  const id = text(formData, "id");
+  const regular = text(formData, "regular") === "1";
+  const rawReturn = text(formData, "return_to");
+  const returnTo = rawReturn.startsWith("/students") ? rawReturn : `/students/${id}`;
+  const { error } = await supabase.from("students").update({ is_regular: regular }).eq("id", id);
+  if (error) back(returnTo, "error", friendlyError(error));
+  revalidatePath("/students");
+  revalidatePath(`/students/${id}`);
+  revalidatePath("/regulars");
+  back(returnTo, "notice", regular ? "Marked as a regular student." : "Marked as not regular.");
+}
