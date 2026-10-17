@@ -7,91 +7,122 @@ import { logError } from "@/lib/errors";
 import { utcToZonedInputs, zonedToUtc } from "@/lib/time";
 import { shiftMonth, weekdayOfDate } from "@/lib/regular";
 
-export interface SaveRequestInput {
-  month: string;
-  coachId: string;
-  message: string;
-  students: { studentId: string; entries: { date: string; start: string; end: string }[] }[];
-}
-
-export interface SaveRequestResult {
-  ok: boolean;
-  error?: string;
-  savedAt?: string;
-  count?: number;
-}
-
 const MONTH = /^\d{4}-\d{2}$/;
 const TIME = /^\d{2}:\d{2}$/;
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
+const TOKEN = /^[A-Za-z0-9_-]{24,128}$/;
+const NEEDS_UPDATE = "The database needs update 0011. In Supabase → SQL Editor, run supabase/migrations/0011_monthly_confirmations.sql.";
 
-export async function saveOfficeRequest(input: SaveRequestInput): Promise<SaveRequestResult> {
-  const { supabase, org, user } = await requireSession(["admin", "agent"]);
+export interface ActionResult {
+  ok: boolean;
+  error?: string;
+  token?: string;
+  created?: number;
+}
+
+export interface SendMonthlyInput {
+  month: string;
+  coachId: string;
+  venueId: string;
+  studentId: string;
+  token: string;
+  entries: { date: string; start: string; end: string }[];
+}
+
+export async function sendMonthly(input: SendMonthlyInput): Promise<ActionResult> {
+  const { supabase, org, user, membership } = await requireSession(["admin", "agent"]);
   if (!MONTH.test(input.month)) return { ok: false, error: "Choose the month." };
+  if (!input.venueId) return { ok: false, error: "Choose the venue first." };
+  const entries = input.entries
+    .filter((e) => DATE.test(e.date) && e.date.startsWith(input.month) && TIME.test(e.start) && TIME.test(e.end) && e.end > e.start)
+    .sort((a, b) => a.date.localeCompare(b.date) || a.start.localeCompare(b.start));
+  if (!entries.length) return { ok: false, error: "Add at least one date." };
   const coachId = input.coachId || null;
   const monthDate = `${input.month}-01`;
 
-  const entries = input.students.flatMap((s) =>
-    s.entries
-      .filter((e) => DATE.test(e.date) && e.date.startsWith(input.month) && TIME.test(e.start) && TIME.test(e.end) && e.end > e.start)
-      .map((e) => ({ studentId: s.studentId, ...e }))
-  );
-
-  let query = supabase.from("office_requests").select("id").eq("org_id", org.id).eq("month", monthDate);
+  let query = supabase.from("monthly_confirmations").select("id, token").eq("student_id", input.studentId).eq("month", monthDate);
   query = coachId ? query.eq("coach_id", coachId) : query.is("coach_id", null);
-  const { data: found, error: findError } = await query.maybeSingle();
+  const { data: existing, error: findError } = await query.maybeSingle();
   if (findError) {
-    logError("office-request-find", findError);
-    return { ok: false, error: "The database needs update 0010. In Supabase → SQL Editor, run supabase/migrations/0010_regular_schedules.sql." };
+    logError("monthly-find", findError);
+    return { ok: false, error: NEEDS_UPDATE };
   }
 
-  const now = new Date().toISOString();
-  let requestId = found?.id as string | undefined;
-  if (requestId) {
-    await supabase.from("office_requests").update({ message: input.message, sent_at: now }).eq("id", requestId);
-  } else {
-    const { data: created, error } = await supabase
-      .from("office_requests")
-      .insert({ org_id: org.id, coach_id: coachId, month: monthDate, message: input.message, sent_at: now, created_by: user.id })
-      .select("id")
-      .single();
-    if (error || !created) {
-      logError("office-request-create", error);
-      return { ok: false, error: "Couldn't save the request. Try again." };
-    }
-    requestId = created.id as string;
-  }
-
-  const { data: settled } = await supabase
-    .from("office_request_items")
-    .select("student_id, date")
-    .eq("request_id", requestId)
-    .neq("result", "pending");
-  const done = new Set(((settled ?? []) as { student_id: string; date: string }[]).map((i) => `${i.student_id}|${i.date}`));
-
-  await supabase.from("office_request_items").delete().eq("request_id", requestId).eq("result", "pending");
-  const rows = entries
-    .filter((e) => !done.has(`${e.studentId}|${e.date}`))
-    .map((e) => ({
-      org_id: org.id,
-      request_id: requestId,
-      student_id: e.studentId,
-      coach_id: coachId,
-      date: e.date,
-      start_time: e.start,
-      end_time: e.end
-    }));
-  if (rows.length) {
-    const { error } = await supabase.from("office_request_items").insert(rows);
+  if (existing) {
+    await supabase.rpc("staff_reset_monthly", { p_id: existing.id });
+    const { error } = await supabase
+      .from("monthly_confirmations")
+      .update({
+        entries,
+        venue_id: input.venueId,
+        status: "sent",
+        student_note: null,
+        answered_by: null,
+        responded_at: null,
+        office_sent_at: null,
+        sent_at: new Date().toISOString(),
+        assigned_agent_id: membership.id
+      })
+      .eq("id", existing.id);
     if (error) {
-      logError("office-request-items", error);
-      return { ok: false, error: "Couldn't save the schedule lines. Try again." };
+      logError("monthly-update", error);
+      return { ok: false, error: "Couldn't save. Try again." };
     }
+    revalidatePath("/regulars");
+    return { ok: true, token: existing.token as string };
   }
 
+  if (!TOKEN.test(input.token)) return { ok: false, error: "Couldn't create the link. Reload the page and try again." };
+  const { error } = await supabase.from("monthly_confirmations").insert({
+    org_id: org.id,
+    student_id: input.studentId,
+    coach_id: coachId,
+    venue_id: input.venueId,
+    month: monthDate,
+    token: input.token,
+    entries,
+    status: "sent",
+    assigned_agent_id: membership.id,
+    created_by: user.id
+  });
+  if (error) {
+    logError("monthly-insert", error);
+    return { ok: false, error: error.code === "42P01" ? NEEDS_UPDATE : "Couldn't save. Try again." };
+  }
   revalidatePath("/regulars");
-  revalidatePath("/import");
-  return { ok: true, savedAt: now, count: rows.length };
+  return { ok: true, token: input.token };
+}
+
+export async function confirmMonthlyByStaff(id: string): Promise<ActionResult> {
+  const { supabase } = await requireSession(["admin", "agent"]);
+  const { data, error } = await supabase.rpc("staff_confirm_monthly", { p_id: id });
+  if (error) {
+    logError("monthly-staff-confirm", error);
+    return { ok: false, error: "Couldn't mark as confirmed." };
+  }
+  revalidatePath("/regulars");
+  revalidatePath("/calendar");
+  return { ok: true, created: Number(data ?? 0) };
+}
+
+export async function markOfficeSent(ids: string[]): Promise<ActionResult> {
+  const { supabase } = await requireSession(["admin", "agent"]);
+  const list = ids.filter((id) => typeof id === "string").slice(0, 1000);
+  if (!list.length) return { ok: true };
+  const now = new Date().toISOString();
+  const { error } = await supabase.from("monthly_confirmations").update({ office_sent_at: now }).in("id", list);
+  if (error) {
+    logError("monthly-office-sent", error);
+    return { ok: false, error: "Couldn't save." };
+  }
+  await supabase
+    .from("appointments")
+    .update({ office_contacted_at: now })
+    .in("monthly_id", list)
+    .eq("status", "pending_approval");
+  revalidatePath("/regulars");
+  revalidatePath("/dashboard");
+  return { ok: true };
 }
 
 export async function detectWeeklySchedules(formData: FormData) {
@@ -153,5 +184,5 @@ export async function detectWeeklySchedules(formData: FormData) {
   const students = Array.from(new Set(slots.map((s) => s.student_id)));
   await supabase.from("students").update({ is_regular: true }).in("id", students).eq("is_regular", false);
   revalidatePath("/regulars");
-  back("notice", `Set up ${slots.length} weekly time${slots.length === 1 ? "" : "s"} for ${students.length} student${students.length === 1 ? "" : "s"}. Check them below.`);
+  back("notice", `Set up ${slots.length} weekly time${slots.length === 1 ? "" : "s"} for ${students.length} student${students.length === 1 ? "" : "s"}.`);
 }

@@ -1,8 +1,8 @@
-const VERSION = "v1";
+const VERSION = "v2";
 const PAGES = `courtside-pages-${VERSION}`;
 const ASSETS = `courtside-assets-${VERSION}`;
 const OFFLINE_URL = "/offline.html";
-const SKIP_PREFIXES = ["/api/", "/auth/", "/r/", "/login", "/setup", "/reset-password"];
+const SKIP_PREFIXES = ["/api/", "/auth/", "/r/", "/m/", "/login", "/setup", "/reset-password"];
 const DROP_PARAMS = ["notice", "error", "send", "_rsc"];
 
 self.addEventListener("install", (event) => {

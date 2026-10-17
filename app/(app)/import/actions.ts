@@ -6,6 +6,14 @@ import { createAdminClient, hasAdminClient } from "@/lib/supabase/admin";
 import { isValidDateInput, zonedToUtc } from "@/lib/time";
 import { logError } from "@/lib/errors";
 import { splitSharedNames } from "@/lib/shared-lessons";
+import { weekdayOfDate } from "@/lib/regular";
+
+export interface ImportMatch {
+  name: string;
+  appointmentId: string;
+  studentId: string;
+  same: boolean;
+}
 
 export interface ImportRow {
   date: string;
@@ -13,16 +21,14 @@ export interface ImportRow {
   endHour: number;
   court: string;
   student: string;
-  regular?: boolean;
-  matches?: { name: string; itemId: string; studentId: string; same: boolean }[];
+  matches?: ImportMatch[];
 }
 
 export interface ImportInput {
   coachId: string;
   venueId: string;
-  daysBefore: number;
   rows: ImportRow[];
-  missingItemIds?: string[];
+  missingAppointmentIds?: string[];
 }
 
 export interface ImportProblem {
@@ -43,6 +49,7 @@ export interface ImportResult {
   matched: number;
   timeChanged: number;
   missing: number;
+  weeklySchedules: number;
   problems: ImportProblem[];
 }
 
@@ -63,8 +70,26 @@ function hourLabel(hour: number): string {
   return `${h}${hour < 12 ? " AM" : " PM"}`;
 }
 
+function hhmm(hour: number): string {
+  return `${String(hour % 24).padStart(2, "0")}:00`;
+}
+
+const ACTIVE = ["scheduled", "awaiting_response", "pending_approval", "confirmed", "reschedule_requested", "completed"];
+
 export async function importSheetSessions(input: ImportInput): Promise<ImportResult> {
-  const empty: ImportResult = { ok: false, created: 0, alreadyThere: 0, newStudents: 0, newCourts: 0, sharedLessons: 0, matched: 0, timeChanged: 0, missing: 0, problems: [] };
+  const empty: ImportResult = {
+    ok: false,
+    created: 0,
+    alreadyThere: 0,
+    newStudents: 0,
+    newCourts: 0,
+    sharedLessons: 0,
+    matched: 0,
+    timeChanged: 0,
+    missing: 0,
+    weeklySchedules: 0,
+    problems: []
+  };
   const { supabase, org, user, membership } = await requireSession(["admin", "agent"]);
 
   const rows = (Array.isArray(input.rows) ? input.rows : [])
@@ -82,8 +107,6 @@ export async function importSheetSessions(input: ImportInput): Promise<ImportRes
     .slice(0, 600);
   if (rows.length === 0) return { ...empty, error: "Tick at least one session with a student name." };
 
-  const daysBefore = Math.min(Math.max(Math.round(Number(input.daysBefore) || 0), 0), 30);
-
   const [{ data: coach }, { data: venue }] = await Promise.all([
     supabase.from("coaches").select("id").eq("id", input.coachId).eq("org_id", org.id).maybeSingle(),
     supabase.from("venues").select("id").eq("id", input.venueId).eq("org_id", org.id).maybeSingle()
@@ -91,22 +114,24 @@ export async function importSheetSessions(input: ImportInput): Promise<ImportRes
   if (!coach) return { ...empty, error: "Choose which Courtside coach these sessions belong to." };
   if (!venue) return { ...empty, error: "Choose the venue (club) for these courts." };
 
-  const [apptCheck, studentCheck, courtCheck] = await Promise.all([
-    supabase.from("appointments").select("office_approved, message_due_at, import_batch, share_group").limit(1),
+  const [apptCheck, studentCheck, courtCheck, slotCheck] = await Promise.all([
+    supabase.from("appointments").select("office_approved, import_batch, share_group, monthly_id").limit(1),
     supabase.from("students").select("is_regular").limit(1),
-    supabase.from("courts").select("alt_name").limit(1)
+    supabase.from("courts").select("alt_name").limit(1),
+    supabase.from("regular_slots").select("id").limit(1)
   ]);
-  const schemaError = apptCheck.error ?? studentCheck.error ?? courtCheck.error;
+  const schemaError = apptCheck.error ?? studentCheck.error ?? courtCheck.error ?? slotCheck.error;
   if (schemaError) {
     logError("import-schema", schemaError);
     return {
       ...empty,
       error:
-        "The database needs a one-time update before importing. In Supabase → SQL Editor, run the files in supabase/migrations that you haven't run yet (0007, 0008 and 0009), in order, then try again."
+        "The database needs a one-time update before importing. In Supabase → SQL Editor, run the files in supabase/migrations that you haven't run yet (up to 0011), in order, then try again."
     };
   }
 
   const result: ImportResult = { ...empty, ok: true };
+  const now = new Date().toISOString();
 
   const { data: courtRows } = await supabase.from("courts").select("id, name, alt_name").eq("venue_id", venue.id);
   const courts = new Map<string, string>();
@@ -133,7 +158,6 @@ export async function importSheetSessions(input: ImportInput): Promise<ImportRes
     (studentRows ?? []).map((s: { id: string; full_name: string }) => [s.full_name.trim().toLowerCase(), s.id])
   );
 
-  const regularMarked = new Set<string>();
   const dates = rows.map((r) => r.date).sort();
   const rangeStart = zonedToUtc(dates[0], "00:00", org.timezone).toISOString();
   const rangeEnd = zonedToUtc(dates[dates.length - 1], "23:59", org.timezone).toISOString();
@@ -143,164 +167,194 @@ export async function importSheetSessions(input: ImportInput): Promise<ImportRes
     .eq("coach_id", coach.id)
     .gte("starts_at", rangeStart)
     .lte("starts_at", rangeEnd)
-    .in("status", ["scheduled", "awaiting_response", "pending_approval", "confirmed", "reschedule_requested", "completed"]);
+    .in("status", ACTIVE);
   const taken = new Map<number, { studentId: string; shareGroup: string | null }[]>();
   for (const a of (existing ?? []) as { starts_at: string; student_id: string; share_group: string | null }[]) {
     const key = new Date(a.starts_at).getTime();
     taken.set(key, [...(taken.get(key) ?? []), { studentId: a.student_id, shareGroup: a.share_group }]);
   }
 
-  const batch = `sheet-${new Date().toISOString().slice(0, 16)}`;
+  const batch = `sheet-${now.slice(0, 16)}`;
+  const touched = new Set<string>();
+  const patterns = new Map<string, { studentId: string; weekday: number; start: string; end: string; n: number }>();
 
-  const findOrCreateStudent = async (name: string, raw: string, regular: boolean): Promise<string | null> => {
-    let studentId = students.get(name.toLowerCase()) ?? students.get(raw.trim().toLowerCase());
-    if (!studentId) {
-      const { data: created, error } = await supabase
-        .from("students")
-        .insert({
-          org_id: org.id,
-          full_name: name,
-          is_regular: regular,
-          notes: "Added from the office court sheet",
-          created_by: user.id
-        })
-        .select("id")
-        .single();
-      if (error || !created) return null;
-      studentId = created.id as string;
-      students.set(name.toLowerCase(), studentId);
-      result.newStudents += 1;
-    }
-    if (regular && !regularMarked.has(studentId)) {
-      regularMarked.add(studentId);
-      await supabase.from("students").update({ is_regular: true }).eq("id", studentId).eq("is_regular", false);
-    }
-    return studentId;
+  const remember = (studentId: string, date: string, startHour: number, endHour: number) => {
+    touched.add(studentId);
+    const weekday = weekdayOfDate(date);
+    const key = `${studentId}|${weekday}|${startHour}|${endHour}`;
+    const p = patterns.get(key) ?? { studentId, weekday, start: hhmm(startHour), end: endHour === 24 ? "23:59" : hhmm(endHour), n: 0 };
+    p.n += 1;
+    patterns.set(key, p);
+  };
+
+  const findOrCreateStudent = async (name: string, raw: string): Promise<string | null> => {
+    const existingId = students.get(name.toLowerCase()) ?? students.get(raw.trim().toLowerCase());
+    if (existingId) return existingId;
+    const { data: created, error } = await supabase
+      .from("students")
+      .insert({ org_id: org.id, full_name: name, is_regular: true, notes: "Added from the office court sheet", created_by: user.id })
+      .select("id")
+      .single();
+    if (error || !created) return null;
+    students.set(name.toLowerCase(), created.id as string);
+    result.newStudents += 1;
+    return created.id as string;
   };
 
   for (const row of rows) {
     const time = `${hourLabel(row.startHour)}–${hourLabel(row.endHour)}`;
-    const startsAt = zonedToUtc(row.date, `${String(row.startHour).padStart(2, "0")}:00`, org.timezone);
+    const startsAt = zonedToUtc(row.date, hhmm(row.startHour), org.timezone);
     const endsAt =
       row.endHour === 24
         ? new Date(startsAt.getTime() + (24 - row.startHour) * 3600000)
-        : zonedToUtc(row.date, `${String(row.endHour).padStart(2, "0")}:00`, org.timezone);
-    const regular = row.regular !== false;
+        : zonedToUtc(row.date, hhmm(row.endHour), org.timezone);
+    const courtId = courts.get(courtKey(row.court)) ?? null;
+    const courtNote = courtId ? null : `Court on the office sheet: ${row.court}`;
     const rawNames = splitSharedNames(row.student);
     const names = (rawNames.length ? rawNames : [row.student.trim()]).slice(0, 6);
-
     const matchList = Array.isArray(row.matches) ? row.matches : [];
-    const ids: { id: string; name: string; match?: { itemId: string; same: boolean } }[] = [];
+
+    const people: { id: string; name: string; match?: ImportMatch }[] = [];
     for (const raw of names) {
       const name = tidyName(raw);
-      const match = matchList.find((m) => m.name.trim().toLowerCase() === raw.trim().toLowerCase());
-      if (match && match.studentId) {
-        ids.push({ id: match.studentId, name, match: { itemId: match.itemId, same: Boolean(match.same) } });
+      const match = matchList.find((m) => m.name.trim().toLowerCase() === raw.trim().toLowerCase() && m.studentId && m.appointmentId);
+      if (match) {
+        people.push({ id: match.studentId, name, match });
         continue;
       }
-      const id = await findOrCreateStudent(name, raw, regular);
+      const id = await findOrCreateStudent(name, raw);
       if (!id) {
         result.problems.push({ date: row.date, time, student: name, reason: "Couldn't create the student." });
         continue;
       }
-      ids.push({ id, name });
+      people.push({ id, name });
     }
-    if (!ids.length) continue;
+    if (!people.length) continue;
 
     const already = taken.get(startsAt.getTime()) ?? [];
-    for (const s of ids) {
-      if (s.match && already.some((a) => a.studentId === s.id)) {
-        await supabase.from("office_request_items").update({ result: s.match.same ? "matched" : "changed", updated_at: new Date().toISOString() }).eq("id", s.match.itemId);
-        if (s.match.same) result.matched += 1;
-        else result.timeChanged += 1;
-      }
-    }
-    const missing = ids.filter((s) => !already.some((a) => a.studentId === s.id));
-    if (!missing.length) {
-      result.alreadyThere += 1;
-      continue;
-    }
-    if (already.length && !(names.length > 1 && already.some((a) => ids.some((s) => s.id === a.studentId)))) {
-      result.alreadyThere += 1;
-      continue;
-    }
-
     const existingGroup = already.find((a) => a.shareGroup)?.shareGroup ?? null;
     const shareGroup: string | null = names.length > 1 ? existingGroup ?? crypto.randomUUID() : null;
-    if (shareGroup && already.length && !existingGroup) {
-      await supabase
-        .from("appointments")
-        .update({ share_group: shareGroup })
-        .eq("coach_id", coach.id)
-        .eq("starts_at", startsAt.toISOString())
-        .in("student_id", already.map((a) => a.studentId));
-    }
-    const dueAt = regular ? new Date(startsAt.getTime() - daysBefore * 86400000) : new Date();
     let createdHere = 0;
 
-    for (const student of missing) {
-      const same = student.match?.same === true;
-      const changed = student.match ? !student.match.same : false;
-      const noteParts = [
-        courts.has(courtKey(row.court)) ? null : `Court on the office sheet: ${row.court}`,
-        changed ? "The office gave a different time from the one requested — tell the student." : null
-      ].filter(Boolean);
-      const { data: inserted, error } = await supabase.from("appointments").insert({
+    for (const person of people) {
+      if (person.match) {
+        const changes: Record<string, unknown> = {
+          status: "confirmed",
+          office_approved: true,
+          court_id: courtId,
+          import_batch: batch
+        };
+        if (!person.match.same) {
+          changes.starts_at = startsAt.toISOString();
+          changes.ends_at = endsAt.toISOString();
+          changes.student_informed_at = null;
+          changes.office_note = `The office gave ${time} on the sheet — different from what was requested.`;
+        }
+        if (shareGroup) changes.share_group = shareGroup;
+        const { error } = await supabase.from("appointments").update(changes).eq("id", person.match.appointmentId);
+        if (error) {
+          result.problems.push({
+            date: row.date,
+            time,
+            student: person.name,
+            reason: error.code === "23P01" ? "The office's time overlaps another booking in Courtside." : "Couldn't update the session."
+          });
+          if (error.code !== "23P01") logError("import-match", error);
+          continue;
+        }
+        if (person.match.same) {
+          await supabase.from("appointments").update({ student_informed_at: now }).eq("id", person.match.appointmentId);
+          result.matched += 1;
+        } else {
+          result.timeChanged += 1;
+        }
+        taken.set(startsAt.getTime(), [...(taken.get(startsAt.getTime()) ?? []), { studentId: person.id, shareGroup }]);
+        remember(person.id, row.date, row.startHour, row.endHour);
+        continue;
+      }
+
+      if (already.some((a) => a.studentId === person.id)) {
+        result.alreadyThere += 1;
+        remember(person.id, row.date, row.startHour, row.endHour);
+        continue;
+      }
+
+      if (shareGroup && already.length && !existingGroup) {
+        await supabase
+          .from("appointments")
+          .update({ share_group: shareGroup })
+          .eq("coach_id", coach.id)
+          .eq("starts_at", startsAt.toISOString())
+          .in("student_id", already.map((a) => a.studentId));
+      }
+
+      const { error } = await supabase.from("appointments").insert({
         org_id: org.id,
         reference: "",
-        student_id: student.id,
+        student_id: person.id,
         coach_id: coach.id,
         venue_id: venue.id,
-        court_id: courts.get(courtKey(row.court)) ?? null,
+        court_id: courtId,
         starts_at: startsAt.toISOString(),
         ends_at: endsAt.toISOString(),
         assigned_agent_id: membership.id,
+        status: "confirmed",
         office_approved: true,
-        status: same ? "confirmed" : "scheduled",
-        student_informed_at: same ? new Date().toISOString() : null,
-        message_due_at: same ? null : (changed ? new Date() : dueAt).toISOString(),
+        student_informed_at: now,
         import_batch: batch,
         share_group: shareGroup,
-        notes: noteParts.length ? noteParts.join("\n") : null,
+        notes: courtNote,
         created_by: user.id
-      }).select("id").single();
+      });
       if (error) {
         result.problems.push({
           date: row.date,
           time,
-          student: student.name,
-          reason:
-            error.code === "23P01"
-              ? "Overlaps another booking for this coach or court already in Courtside."
-              : "Couldn't save this session."
+          student: person.name,
+          reason: error.code === "23P01" ? "Overlaps another booking for this coach or court already in Courtside." : "Couldn't save this session."
         });
         if (error.code !== "23P01") logError("import-appointment", error);
         continue;
       }
-      taken.set(startsAt.getTime(), [...(taken.get(startsAt.getTime()) ?? []), { studentId: student.id, shareGroup }]);
+      taken.set(startsAt.getTime(), [...(taken.get(startsAt.getTime()) ?? []), { studentId: person.id, shareGroup }]);
       result.created += 1;
-      if (student.match) {
-        await supabase
-          .from("office_request_items")
-          .update({ result: same ? "matched" : "changed", appointment_id: inserted?.id ?? null, updated_at: new Date().toISOString() })
-          .eq("id", student.match.itemId);
-        if (same) result.matched += 1;
-        else result.timeChanged += 1;
-      }
       createdHere += 1;
+      remember(person.id, row.date, row.startHour, row.endHour);
     }
     if (shareGroup && createdHere > 0) result.sharedLessons += 1;
   }
 
-  const missingIds = (Array.isArray(input.missingItemIds) ? input.missingItemIds : []).filter((id) => typeof id === "string").slice(0, 2000);
+  const missingIds = (Array.isArray(input.missingAppointmentIds) ? input.missingAppointmentIds : [])
+    .filter((id) => typeof id === "string")
+    .slice(0, 2000);
   if (missingIds.length) {
     const { data: marked } = await supabase
-      .from("office_request_items")
-      .update({ result: "missing", updated_at: new Date().toISOString() })
+      .from("appointments")
+      .update({ status: "not_approved", office_note: "Not on the office's court sheet." })
       .in("id", missingIds)
-      .eq("result", "pending")
+      .eq("status", "pending_approval")
       .select("id");
     result.missing = (marked ?? []).length;
+  }
+
+  if (touched.size) {
+    const byStudent = new Map<string, { weekday: number; start: string; end: string; n: number }[]>();
+    for (const p of patterns.values()) byStudent.set(p.studentId, [...(byStudent.get(p.studentId) ?? []), p]);
+    const slots: { org_id: string; student_id: string; coach_id: string; weekday: number; start_time: string; end_time: string }[] = [];
+    for (const [studentId, list] of byStudent) {
+      const repeating = list.filter((p) => p.n >= 2);
+      for (const p of repeating.length ? repeating : list) {
+        slots.push({ org_id: org.id, student_id: studentId, coach_id: coach.id, weekday: p.weekday, start_time: p.start, end_time: p.end });
+      }
+    }
+    const ids = Array.from(byStudent.keys());
+    const { error: deleteError } = await supabase.from("regular_slots").delete().in("student_id", ids).eq("coach_id", coach.id);
+    if (!deleteError && slots.length) {
+      const { error: slotError } = await supabase.from("regular_slots").insert(slots);
+      if (slotError) logError("import-slots", slotError);
+      else result.weeklySchedules = ids.length;
+    }
+    await supabase.from("students").update({ is_regular: true }).in("id", ids).eq("is_regular", false);
   }
 
   revalidatePath("/regulars");

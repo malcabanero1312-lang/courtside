@@ -116,6 +116,18 @@ export function buildStudentAskMessage(firstName: string, month: string, entries
   ].join("\n");
 }
 
+export function buildMonthlyStudentMessage(firstName: string, month: string, entries: RequestEntry[], link: string): string {
+  const lines = groupEntries(entries).flatMap((g) => [groupHeading(g), datesLine(g.dates)]);
+  return [
+    `Hi ${firstName || "there"}! Here's your tennis schedule for ${monthName(month)}:`,
+    "",
+    ...lines,
+    "",
+    "Please confirm, or tell us if you'd like to change anything, here:",
+    link
+  ].join("\n");
+}
+
 export function buildMissingMessage(firstName: string, entries: RequestEntry[]): string {
   const lines = groupEntries(entries).flatMap((g) => [groupHeading(g), datesLine(g.dates)]);
   return [

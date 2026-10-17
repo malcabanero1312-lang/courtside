@@ -3,7 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 
 type CookieToSet = { name: string; value: string; options: CookieOptions };
 
-const PUBLIC_PATHS = ["/login", "/auth", "/r/", "/api/cron", "/setup"];
+const PUBLIC_PATHS = ["/login", "/auth", "/r/", "/m/", "/api/cron", "/setup"];
 
 export async function middleware(request: NextRequest) {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";

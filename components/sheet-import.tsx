@@ -23,7 +23,7 @@ export interface RequestedItem {
 
 interface RowMatch {
   name: string;
-  itemId: string;
+  appointmentId: string;
   studentId: string;
   same: boolean;
   requested: string;
@@ -51,7 +51,6 @@ interface Row extends SheetSession {
   name: string;
   group: boolean;
   past: boolean;
-  regular: boolean;
 }
 
 const GROUP_WORDS = /\b(GROUP|GRP|JR|JUNIOR|LVL|LEVEL|NOVICE|PEE ?WEE|ADVANCED|TNT|CLINIC|SQUAD|CLASS|CAMP)\b/i;
@@ -86,7 +85,6 @@ export function SheetImport({
   venues,
   courts,
   studentNames,
-  defaultDaysBefore,
   today,
   requested = []
 }: {
@@ -94,7 +92,6 @@ export function SheetImport({
   venues: { id: string; name: string }[];
   courts: { venueId: string; name: string; altName: string | null }[];
   studentNames: string[];
-  defaultDaysBefore: number;
   today: string;
   requested?: RequestedItem[];
 }) {
@@ -105,7 +102,6 @@ export function SheetImport({
   const [sheetCoach, setSheetCoach] = useState("");
   const [coachId, setCoachId] = useState("");
   const [venueId, setVenueId] = useState(venues[0]?.id ?? "");
-  const [daysBefore, setDaysBefore] = useState(defaultDaysBefore);
   const [rows, setRows] = useState<Row[]>([]);
   const [result, setResult] = useState<ImportResult | null>(null);
   const [saving, startSaving] = useTransition();
@@ -139,7 +135,7 @@ export function SheetImport({
         claimed.add(item.id);
         list.push({
           name,
-          itemId: item.id,
+          appointmentId: item.id,
           studentId: item.studentId,
           same: item.start === hh(row.startHour) && item.end === hh(row.endHour),
           requested: `${time12(item.start)} – ${time12(item.end)}`
@@ -154,7 +150,7 @@ export function SheetImport({
     const claimed = new Set<string>();
     for (const row of rows) {
       if (!row.include) continue;
-      (matchesByRow.get(row.key) ?? []).forEach((m) => claimed.add(m.itemId));
+      (matchesByRow.get(row.key) ?? []).forEach((m) => claimed.add(m.appointmentId));
     }
     return relevantRequests.filter((r) => !claimed.has(r.id));
   }, [rows, matchesByRow, relevantRequests]);
@@ -181,8 +177,7 @@ export function SheetImport({
           name: s.student,
           group,
           past,
-          regular: true,
-          include: Boolean(s.student.trim()) && !group && !past
+          include: Boolean(s.student.trim()) && !group
         };
       })
     );
@@ -275,17 +270,15 @@ export function SheetImport({
       const res = await importSheetSessions({
         coachId,
         venueId,
-        daysBefore,
         rows: included.map((r) => ({
           date: r.date,
           startHour: r.startHour,
           endHour: r.endHour,
           court: r.court,
           student: r.name,
-          regular: r.regular,
-          matches: (matchesByRow.get(r.key) ?? []).map((m) => ({ name: m.name, itemId: m.itemId, studentId: m.studentId, same: m.same }))
+          matches: (matchesByRow.get(r.key) ?? []).map((m) => ({ name: m.name, appointmentId: m.appointmentId, studentId: m.studentId, same: m.same }))
         })),
-        missingItemIds: missingRequests.map((m) => m.id)
+        missingAppointmentIds: missingRequests.map((m) => m.id)
       });
       if (!res.ok) {
         setError(res.error ?? "Import failed.");
@@ -304,9 +297,10 @@ export function SheetImport({
             <strong>
               Imported {result.created} booking{result.created === 1 ? "" : "s"} for Coach {sheetCoach}.
             </strong>{" "}
-            They're approved by the office. Regular students appear in <strong>To do</strong> {daysBefore} day
-            {daysBefore === 1 ? "" : "s"} before each lesson; students who aren't regular are in <strong>To do</strong> now, ready to send for
-            confirmation.
+            Everything from the sheet is saved as confirmed — no messages needed.
+            {result.weeklySchedules
+              ? ` Weekly schedules updated for ${result.weeklySchedules} student${result.weeklySchedules === 1 ? "" : "s"}.`
+              : ""}
           </div>
         </div>
         <ul className="small" style={{ margin: 0, paddingLeft: 18 }}>
@@ -318,8 +312,8 @@ export function SheetImport({
           ) : null}
           {result.sharedLessons ? (
             <li>
-              {result.sharedLessons} shared lesson{result.sharedLessons === 1 ? "" : "s"} — shown together on the calendar, but each student
-              confirms separately.
+              {result.sharedLessons} shared lesson{result.sharedLessons === 1 ? "" : "s"} — shown side by side on the calendar, one box per
+              student.
             </li>
           ) : null}
           {result.newCourts ? <li>{result.newCourts} court{result.newCourts === 1 ? "" : "s"} added to the venue.</li> : null}
@@ -328,9 +322,9 @@ export function SheetImport({
           <div className="notice info" style={{ margin: 0 }}>
             <Icon name="info" size={17} />
             <div>
-              <strong>Compared with your request:</strong> {result.matched} as requested (confirmed — no message needed)
-              {result.timeChanged ? `, ${result.timeChanged} with a different time (in To do now, tell the student)` : ""}
-              {result.missing ? `, ${result.missing} not on the sheet` : ""}.
+              <strong>Compared with what students confirmed:</strong> {result.matched} as requested (no message needed)
+              {result.timeChanged ? `, ${result.timeChanged} with a different time (in To do → Tell student)` : ""}
+              {result.missing ? `, ${result.missing} not given by the office (in To do → Tell student)` : ""}.
             </div>
           </div>
         ) : null}
@@ -445,21 +439,6 @@ export function SheetImport({
                 ))}
               </select>
             </label>
-            <label className="field">
-              <span>Ask students to confirm</span>
-              <div className="row" style={{ gap: 8 }}>
-                <input
-                  className="input"
-                  type="number"
-                  min={0}
-                  max={30}
-                  value={daysBefore}
-                  onChange={(e) => setDaysBefore(Math.min(30, Math.max(0, Number(e.target.value) || 0)))}
-                  style={{ width: 80 }}
-                />
-                <span className="small muted">days before each lesson</span>
-              </div>
-            </label>
           </div>
           {coachNotes.length ? (
             <div className="notice info" style={{ margin: 0 }}>
@@ -474,7 +453,7 @@ export function SheetImport({
 
       {sheet && relevantRequests.length ? (
         <section className="card card-pad stack">
-          <div className="card-title">Compared with your office request</div>
+          <div className="card-title">Compared with what students confirmed</div>
           <div className="row wrap" style={{ gap: 8 }}>
             <span className="badge plain tone-green">
               ✓ {Array.from(matchesByRow.values()).flat().filter((m) => m.same).length} as requested
@@ -483,8 +462,8 @@ export function SheetImport({
             <span className="badge plain tone-red">{missingRequests.length} not on the sheet</span>
           </div>
           <p className="small muted" style={{ margin: 0 }}>
-            As requested → saved as confirmed, no need to message the student. Time changed → goes to To do now so you can tell the student.
-            Not on the sheet → tell the student below.
+            As requested → confirmed, no need to message the student. Time changed → confirmed at the office's time, and it goes to To do
+            so you can tell the student. Not on the sheet → marked not approved; tell the student below.
           </p>
           {missingByStudent.length ? (
             <div className="list" style={{ border: "1px solid var(--line)", borderRadius: 10 }}>
@@ -519,28 +498,16 @@ export function SheetImport({
             <div>
               <div className="card-title">3. Check the sessions</div>
               <div className="small muted">
-                Untick anything you don't want. Group classes and past dates start unticked. You can fix a student's name. Two names like
-                “Lam / Kristen” become one shared lesson on the calendar, with a separate confirmation for each student. Tap
-                “Regular” to switch a student to “Not regular” — they're asked to confirm right away instead of {daysBefore} day
-                {daysBefore === 1 ? "" : "s"} before.
+                Everything ticked is saved as confirmed. Group classes start unticked, and you can fix a student's name. Two names like
+                “Lam / Kristen” become two students sharing the slot.
               </div>
             </div>
             <div className="row" style={{ gap: 6 }}>
-              <button type="button" className="btn small ghost" onClick={() => setRows((r) => r.map((x) => ({ ...x, include: !x.past && Boolean(x.name.trim()) })))}>
+              <button type="button" className="btn small ghost" onClick={() => setRows((r) => r.map((x) => ({ ...x, include: !Boolean(x.name.trim()) })))}>
                 Tick all
               </button>
               <button type="button" className="btn small ghost" onClick={() => setRows((r) => r.map((x) => ({ ...x, include: false })))}>
                 Untick all
-              </button>
-              <button
-                type="button"
-                className="btn small ghost"
-                onClick={() => setRows((r) => {
-                  const allRegular = r.every((x) => x.regular);
-                  return r.map((x) => ({ ...x, regular: !allRegular }));
-                })}
-              >
-                {rows.every((x) => x.regular) ? "All not regular" : "All regular"}
               </button>
             </div>
           </div>
@@ -571,23 +538,15 @@ export function SheetImport({
                     aria-label="Student name"
                   />
                   <div className="import-tags">
-                    <button
-                      type="button"
-                      className={`badge plain import-regular ${row.regular ? "tone-green" : "tone-muted"}`}
-                      onClick={() => setRow(row.key, { regular: !row.regular })}
-                      title="Switch between regular and not regular"
-                    >
-                      {row.regular ? "Regular" : "Not regular"}
-                    </button>
                     {row.past ? <span className="badge plain tone-muted">Past</span> : null}
                     {row.group ? <span className="badge plain tone-violet">Group class</span> : null}
                     {(matchesByRow.get(row.key) ?? []).map((m) =>
                       m.same ? (
-                        <span key={m.itemId} className="badge plain tone-green" title="Same as your request — no need to message the student">
+                        <span key={m.appointmentId} className="badge plain tone-green" title="Same as your request — no need to message the student">
                           ✓ {names.length > 1 ? `${m.name.split(" ")[0]}: ` : ""}As requested
                         </span>
                       ) : (
-                        <span key={m.itemId} className="badge plain tone-amber" title="The office gave a different time — the student will be asked to confirm">
+                        <span key={m.appointmentId} className="badge plain tone-amber" title="The office gave a different time — you'll need to tell the student">
                           {names.length > 1 ? `${m.name.split(" ")[0]}: ` : ""}Time changed · asked {m.requested}
                         </span>
                       )
