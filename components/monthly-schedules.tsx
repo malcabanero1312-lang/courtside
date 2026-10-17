@@ -141,6 +141,7 @@ export function MonthlySchedules({
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [onlyNew, setOnlyNew] = useState(true);
   const [officeCopied, setOfficeCopied] = useState(false);
+  const [copiedFor, setCopiedFor] = useState<string | null>(null);
   const [, startTransition] = useTransition();
   const [extraDraft, setExtraDraft] = useState<Record<string, RequestEntry>>({});
 
@@ -164,7 +165,25 @@ export function MonthlySchedules({
     declined: records.filter((r) => r.status === "declined").length
   };
 
-  const send = (student: MonthlyStudent) => {
+  const copyText = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      const area = document.createElement("textarea");
+      area.value = text;
+      document.body.appendChild(area);
+      area.select();
+      document.execCommand("copy");
+      area.remove();
+    }
+  };
+
+  const flashCopied = (id: string) => {
+    setCopiedFor(id);
+    window.setTimeout(() => setCopiedFor((current) => (current === id ? null : current)), 1800);
+  };
+
+  const send = (student: MonthlyStudent, mode: "whatsapp" | "copy" = "whatsapp") => {
     const existing = recordFor.get(student.id);
     const entries = draftEntries(drafts[student.id]);
     if (!entries.length) {
@@ -177,7 +196,13 @@ export function MonthlySchedules({
     }
     const token = existing?.token ?? newToken();
     const link = `${window.location.origin}/m/${token}`;
-    openWhatsApp(student.phone, buildMonthlyStudentMessage(student.name.split(" ")[0], month, entries, link));
+    const text = buildMonthlyStudentMessage(student.name.split(" ")[0], month, entries, link);
+    if (mode === "whatsapp") {
+      openWhatsApp(student.phone, text);
+    } else {
+      void copyText(text);
+      flashCopied(student.id);
+    }
     setBusy(student.id);
     setErrors((e) => ({ ...e, [student.id]: "" }));
     startTransition(async () => {
@@ -196,12 +221,8 @@ export function MonthlySchedules({
     const existing = recordFor.get(student.id);
     if (!existing) return;
     const link = `${window.location.origin}/m/${existing.token}`;
-    const text = buildMonthlyStudentMessage(student.name.split(" ")[0], month, existing.entries, link);
-    try {
-      await navigator.clipboard.writeText(text);
-    } catch {
-      window.prompt("Copy this message", text);
-    }
+    await copyText(buildMonthlyStudentMessage(student.name.split(" ")[0], month, existing.entries, link));
+    flashCopied(student.id);
   };
 
   const markConfirmed = (student: MonthlyStudent) => {
@@ -456,9 +477,20 @@ export function MonthlySchedules({
                       <Icon name="whatsapp" size={15} /> {record ? "Send updated schedule" : "Send to student"}
                     </button>
                   ) : null}
+                  {!record || !locked ? (
+                    <button
+                      type="button"
+                      className="btn small"
+                      disabled={busy === student.id}
+                      onClick={() => send(student, "copy")}
+                      title="Copy the message with their link, to paste anywhere"
+                    >
+                      <Icon name={copiedFor === student.id ? "check" : "copy"} size={14} /> {copiedFor === student.id ? "Copied" : "Copy message"}
+                    </button>
+                  ) : null}
                   {record && record.status === "sent" && locked ? (
                     <button type="button" className="btn small" onClick={() => copyLinkMessage(student)}>
-                      <Icon name="copy" size={14} /> Copy message
+                      <Icon name={copiedFor === student.id ? "check" : "copy"} size={14} /> {copiedFor === student.id ? "Copied" : "Copy message"}
                     </button>
                   ) : null}
                   {record && (record.status === "sent" || record.status === "change_requested") ? (
